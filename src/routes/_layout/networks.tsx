@@ -9,10 +9,11 @@ import {
   Spinner,
   Text,
   VStack,
+  HStack,
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
-import { FiDownload, FiGlobe } from "react-icons/fi"
+import { FiDownload, FiGlobe, FiChevronUp, FiChevronDown } from "react-icons/fi"
 
 import useCustomToast from "@/hooks/useCustomToast"
 import { OpenAPI } from "@/client"
@@ -46,6 +47,8 @@ const NetworksPage = () => {
   const [loading, setLoading] = useState(false)
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [loadingGraph, setLoadingGraph] = useState(false)
+  const [graphLoadStep, setGraphLoadStep] = useState<string | null>(null)
+  const [panelsCollapsed, setPanelsCollapsed] = useState(false)
   const { showErrorToast } = useCustomToast()
 
   // Fetch networks
@@ -92,6 +95,7 @@ const NetworksPage = () => {
   // Fetch and parse GDF file
   const fetchGdfFile = async (networkName: string, filename: string) => {
     setLoadingGraph(true)
+    setGraphLoadStep("Requesting file from server…")
     try {
       const baseUrl = OpenAPI.BASE || "http://localhost"
       const url = `${baseUrl}/api/v1/networks/${networkName}/gdf/${filename}`
@@ -103,6 +107,7 @@ const NetworksPage = () => {
         console.error("GDF fetch error:", errorText)
         throw new Error(`Failed to fetch GDF file: ${response.status} ${response.statusText}`)
       }
+      setGraphLoadStep("Receiving graph data…")
       const data = await response.json()
       console.log("Received graph data:", data)
       console.log("Nodes count:", data.nodes?.length)
@@ -113,13 +118,17 @@ const NetworksPage = () => {
       if (data.edges && data.edges.length > 0) {
         console.log("Sample edge:", data.edges[0])
       }
+      setGraphLoadStep("Rendering network…")
       setGraphData(data)
       setSelectedFile(filename)
+      // Collapse the top panels to focus on the network
+      setPanelsCollapsed(true)
     } catch (error) {
       console.error("GDF fetch error:", error)
       showErrorToast(`Failed to fetch GDF file: ${error instanceof Error ? error.message : 'Unknown error'}`)
     } finally {
       setLoadingGraph(false)
+      setGraphLoadStep(null)
     }
   }
 
@@ -131,12 +140,44 @@ const NetworksPage = () => {
   return (
     <Container maxW="full">
       <Box pt={4}>
-        <Heading size="lg" mb={6}>
-          <FiGlobe style={{ display: "inline", marginRight: "8px" }} />
-          Networks & GDF Files
-        </Heading>
+        <Flex justify="space-between" align="center" mb={6}>
+          <Heading size="lg">
+            <FiGlobe style={{ display: "inline", marginRight: "8px" }} />
+            Networks & GDF Files
+          </Heading>
+          <HStack gap={2}>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => setPanelsCollapsed(true)}
+              title="Hide the selection panels above"
+              disabled={panelsCollapsed}
+            >
+              <HStack gap={1}>
+                <FiChevronUp />
+                <span>Hide selection</span>
+              </HStack>
+            </Button>
+            <Button
+              size="xs"
+              variant="outline"
+              onClick={() => {
+                setPanelsCollapsed(false)
+                try { window.scrollTo({ top: 0, behavior: 'smooth' }) } catch {}
+              }}
+              title="Show the selection panels to pick a different network/file"
+              disabled={!panelsCollapsed}
+            >
+              <HStack gap={1}>
+                <FiChevronDown />
+                <span>Show selection</span>
+              </HStack>
+            </Button>
+          </HStack>
+        </Flex>
 
-        <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap={6}>
+        {(!panelsCollapsed) && (
+          <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap={6}>
           {/* Networks Panel */}
           <Card.Root>
             <Card.Header>
@@ -205,7 +246,8 @@ const NetworksPage = () => {
               )}
             </Card.Body>
           </Card.Root>
-        </Grid>
+          </Grid>
+        )}
 
         {/* Network Visualization */}
         {graphData && (
@@ -218,11 +260,27 @@ const NetworksPage = () => {
             </Card.Header>
             <Card.Body p={0}>
               {loadingGraph ? (
-                <Flex justify="center" py={8}>
+                <Flex direction="column" align="center" py={8} gap={2}>
                   <Spinner />
+                  <Text fontSize="sm">{graphLoadStep || "Loading network…"}</Text>
+                  {(selectedNetwork || selectedFile) && (
+                    <Text fontSize="xs" opacity={0.8}>
+                      {selectedNetwork || "-"}
+                      {selectedFile ? ` / ${selectedFile}` : ""}
+                    </Text>
+                  )}
                 </Flex>
               ) : (
-                <CytoscapeNetwork data={graphData} height="600px" />
+                <CytoscapeNetwork
+                  data={graphData}
+                  height="600px"
+                  wheelSensitivity={2.5}
+                  minZoom={0.1}
+                  maxZoom={3}
+                  autoRunLayout={false}
+                  networkName={selectedNetwork || undefined}
+                  filename={selectedFile || undefined}
+                />
               )}
             </Card.Body>
           </Card.Root>

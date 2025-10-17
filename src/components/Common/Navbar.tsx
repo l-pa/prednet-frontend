@@ -3,6 +3,7 @@ import { Link } from "@tanstack/react-router"
 
 import Logo from "/assets/images/fastapi-logo.svg"
 import UserMenu from "./UserMenu"
+import GlobalSettings from "./GlobalSettings"
 
 function Navbar() {
   const display = useBreakpointValue({ base: "none", md: "flex" })
@@ -20,9 +21,10 @@ function Navbar() {
       p={4}
     >
       <Link to="/">
-        <Image src={Logo} alt="Logo" maxW="3xs" p={2} />
+        <Image src={Logo} alt="Logo" maxW="65px" />
       </Link>
       <Flex gap={2} alignItems="center">
+        <GlobalSettings />
         <UserMenu />
       </Flex>
     </Flex>
