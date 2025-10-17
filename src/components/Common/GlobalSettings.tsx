@@ -60,7 +60,12 @@ function GlobalSettings() {
   return (
     <DialogRoot open={open} onOpenChange={(e) => setOpen(e.open)}>
       <DialogTrigger asChild>
-        <Button size="sm" variant="outline" leftIcon={<FiSettings />}>Settings</Button>
+        <Button size="sm" variant="outline">
+          <HStack gap={1}>
+            <FiSettings />
+            Settings
+          </HStack>
+        </Button>
       </DialogTrigger>
       <DialogContent portalled>
         <DialogHeader>
