@@ -15,9 +15,9 @@ interface ProteinDistributionListProps {
 const defaultTypeColors: Record<string, string> = {
   matched_prediction: '#74C476',
   matched_reference: '#67A9CF',
-  prediction: '#A1D99B',
-  reference: '#9ECAE1',
-  unknown: '#BDBDBD',
+  prediction: '#FCCF40', // Yellow for prediction
+  reference: '#D94801', // Orange-red for reference
+  unknown: '#cccccc',
 }
 
 export default function ProteinDistributionList({ items }: ProteinDistributionListProps) {
@@ -57,7 +57,7 @@ export default function ProteinDistributionList({ items }: ProteinDistributionLi
                 <Text fontSize="xs" opacity={0.8}>Type distribution</Text>
               </HStack>
               <Box bg="blackAlpha.200" _dark={{ bg: 'whiteAlpha.200' }} h="8px" rounded="sm" position="relative">
-                <HStack gap={0} w={`${totalPct}%`} h="100%">
+                <HStack gap={0} w={`${typeof ratio === 'number' ? Math.max(4, Math.round(ratio * 100)) : totalPct}%`} h="100%">
                   {parts.length === 0 ? (
                     <Box bg="#4A90E2" h="100%" w="100%" rounded="sm" />
                   ) : (

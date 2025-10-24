@@ -250,7 +250,7 @@ const ProteinsPage = () => {
           </Heading>
 
           <Text fontSize="sm" opacity={0.7}>
-            Search for proteins by name or type that are in the same component. When a protein is selected, the list includes all proteins that co-occur in the same components with the selected protein(s).
+            Search for proteins by partial name (case-insensitive) - works with both systematic names (e.g., YMR056C) and gene names (e.g., AAC1). When a protein is selected, the list includes all proteins that co-occur in the same components with the selected protein(s).
           </Text>
 
           <HStack gap={2}>
@@ -434,7 +434,7 @@ const ProteinsPage = () => {
                     {!panelsCollapsed && (
                       <HStack gap={2} flex="1">
                         <Input
-                          placeholder="Search proteins (space-separated)"
+                          placeholder="Search proteins (systematic or gene names, case-insensitive)"
                           value={searchQuery}
                           onChange={(e) => setSearchQuery(e.target.value)}
                           onKeyDown={(e) => {
