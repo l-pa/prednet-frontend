@@ -1140,56 +1140,56 @@ const CytoscapeNetwork = ({
     cy.fit(undefined, 20)
   }, [])
 
-  const handleRunLayoutBackend = useCallback(async () => {
-    const cy = cyRef.current
-    if (!cy || runningBackend) return
-    try {
-      setRunningBackend(true)
+  // const handleRunLayoutBackend = useCallback(async () => {
+  //   const cy = cyRef.current
+  //   if (!cy || runningBackend) return
+  //   try {
+  //     setRunningBackend(true)
 
-      const nodes = cy.nodes().map((n) => ({ data: n.data() }))
-      const edges = cy.edges().map((e) => ({ data: e.data() }))
+  //     const nodes = cy.nodes().map((n) => ({ data: n.data() }))
+  //     const edges = cy.edges().map((e) => ({ data: e.data() }))
 
-      // Collect current node sizes (model units) to help backend avoid overlaps
-      const nodeSizes: Record<string, { width: number; height: number }> = {}
-      cy.nodes().forEach((n) => {
-        const id = String(n.id())
-        nodeSizes[id] = { width: n.width(), height: n.height() }
-      })
+  //     // Collect current node sizes (model units) to help backend avoid overlaps
+  //     const nodeSizes: Record<string, { width: number; height: number }> = {}
+  //     cy.nodes().forEach((n) => {
+  //       const id = String(n.id())
+  //       nodeSizes[id] = { width: n.width(), height: n.height() }
+  //     })
 
-      const container = containerRef.current
-      const containerWidth = container?.clientWidth ?? 800
-      const containerHeight = container?.clientHeight ?? 600
-      const scale = Math.min(containerWidth, containerHeight) * 0.45
+  //     const container = containerRef.current
+  //     const containerWidth = container?.clientWidth ?? 800
+  //     const containerHeight = container?.clientHeight ?? 600
+  //     const scale = Math.min(containerWidth, containerHeight) * 0.45
 
-      const baseUrl = OpenAPI.BASE || window.location.origin
-      const resp = await fetch(`${baseUrl}/api/v1/networks/layout/spring`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ graph: { nodes, edges }, scale, nodeSizes }),
-      })
-      if (!resp.ok) {
-        const txt = await resp.text()
-        throw new Error(`Backend layout failed: ${resp.status} ${resp.statusText} ${txt}`)
-      }
-      const data = (await resp.json()) as { positions: Record<string, { x: number; y: number }> }
-      const positions = data?.positions || {}
+  //     const baseUrl = OpenAPI.BASE || window.location.origin
+  //     const resp = await fetch(`${baseUrl}/api/v1/networks/layout/spring`, {
+  //       method: "POST",
+  //       headers: { "Content-Type": "application/json" },
+  //       body: JSON.stringify({ graph: { nodes, edges }, scale, nodeSizes }),
+  //     })
+  //     if (!resp.ok) {
+  //       const txt = await resp.text()
+  //       throw new Error(`Backend layout failed: ${resp.status} ${resp.statusText} ${txt}`)
+  //     }
+  //     const data = (await resp.json()) as { positions: Record<string, { x: number; y: number }> }
+  //     const positions = data?.positions || {}
 
-      cy.batch(() => {
-        Object.entries(positions).forEach(([id, pos]) => {
-          const node = cy.getElementById(String(id))
-          if (node && node.nonempty()) {
-            node.position({ x: pos.x, y: pos.y })
-          }
-        })
-      })
-      if (fitOnInit) cy.fit(undefined, 20)
-    } catch (err) {
-      // eslint-disable-next-line no-console
-      console.error(err)
-    } finally {
-      setRunningBackend(false)
-    }
-  }, [fitOnInit, runningBackend])
+  //     cy.batch(() => {
+  //       Object.entries(positions).forEach(([id, pos]) => {
+  //         const node = cy.getElementById(String(id))
+  //         if (node && node.nonempty()) {
+  //           node.position({ x: pos.x, y: pos.y })
+  //         }
+  //       })
+  //     })
+  //     if (fitOnInit) cy.fit(undefined, 20)
+  //   } catch (err) {
+  //     // eslint-disable-next-line no-console
+  //     console.error(err)
+  //   } finally {
+  //     setRunningBackend(false)
+  //   }
+  // }, [fitOnInit, runningBackend])
 
   return (
     <Box position="relative" width="100%" height={typeof height === "number" ? `${height}px` : height}>
