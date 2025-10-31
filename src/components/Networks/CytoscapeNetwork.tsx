@@ -41,6 +41,10 @@ interface CytoscapeNetworkProps {
   filename?: string
   // When true, disable default tap highlight of entire component (used in subgraph view)
   disableComponentTapHighlight?: boolean
+  // Optional hint from parent if this component is already a favorite
+  initialFavoriteExists?: boolean
+  // Optional fixed component id for this view (e.g., component page)
+  fixedComponentId?: number
 }
 
 const CytoscapeNetwork = ({
@@ -56,6 +60,8 @@ const CytoscapeNetwork = ({
   networkName,
   filename,
   disableComponentTapHighlight = false,
+  initialFavoriteExists,
+  fixedComponentId,
 }: CytoscapeNetworkProps) => {
   const containerRef = useRef<HTMLDivElement | null>(null)
   const cyRef = useRef<cytoscape.Core | null>(null)
@@ -117,6 +123,53 @@ const CytoscapeNetwork = ({
   const [isNameOpen, setIsNameOpen] = useState(false)
   const [isComponentOpen, setIsComponentOpen] = useState(false)
   const [isDistributionOpen, setIsDistributionOpen] = useState(false)
+  const [savingFavorite, setSavingFavorite] = useState(false)
+  const [savedFavoriteOnce, setSavedFavoriteOnce] = useState(() => !!initialFavoriteExists)
+  const [localComponentId, setLocalComponentId] = useState<number | null>(null)
+
+  // If parent indicates it's already a favorite, reflect that promptly
+  useEffect(() => {
+    if (initialFavoriteExists) setSavedFavoriteOnce(true)
+  }, [initialFavoriteExists])
+
+  // Prefer a server/provided component id for any writes/checks
+  const effectiveComponentId = useMemo<number | null>(() => {
+    if (typeof fixedComponentId === 'number') return fixedComponentId
+    if (typeof selectedNodeInfo?.componentId === 'number') return selectedNodeInfo.componentId
+    return null
+  }, [fixedComponentId, selectedNodeInfo?.componentId])
+
+  // When component info is known (or local cid computed), check if it's already in favorites for this user
+  useEffect(() => {
+    const check = async () => {
+      try {
+        if (!networkName || !filename) return
+        const usedServerCid = (typeof fixedComponentId === 'number') || (typeof selectedNodeInfo?.componentId === 'number')
+        const cid = (typeof fixedComponentId === 'number')
+          ? fixedComponentId
+          : ((typeof selectedNodeInfo?.componentId === 'number') ? selectedNodeInfo?.componentId : localComponentId)
+        if (typeof cid !== 'number') return
+        const baseUrl = OpenAPI.BASE || 'http://localhost'
+        const token = localStorage.getItem('access_token') || ''
+        const headers: Record<string, string> = {}
+        if (token) headers['Authorization'] = `Bearer ${token}`
+        const url = `${baseUrl}/api/v1/favorites/exists?network_name=${encodeURIComponent(networkName)}&filename=${encodeURIComponent(filename)}&component_id=${cid}`
+        const resp = await fetch(url, { headers })
+        if (!resp.ok) return
+        const json = await resp.json()
+        const exists = !!(json && json.exists)
+        if (exists) {
+          setSavedFavoriteOnce(true)
+        } else if (usedServerCid) {
+          // Only clear if we checked with a backend-provided component id
+          setSavedFavoriteOnce(false)
+        }
+      } catch {
+        // ignore
+      }
+    }
+    check()
+  }, [selectedNodeInfo?.componentId, localComponentId, networkName, filename, fixedComponentId])
   // New: collapsible section for node-label proteins
   const [isNodeProteinOpen, setIsNodeProteinOpen] = useState(false)
   const [isNodeHighlightOptionsOpen, setIsNodeHighlightOptionsOpen] = useState(false)
@@ -592,6 +645,20 @@ const CytoscapeNetwork = ({
     }
     return { nidToCid, cidToNodeIds }
   }, [])
+
+  // Locally compute the component id of the currently selected node
+  useEffect(() => {
+    const cy = cyRef.current
+    const nodeId = selectedNode?.id
+    if (!cy || !nodeId) { setLocalComponentId(null); return }
+    try {
+      const { nidToCid } = computeComponents(cy)
+      const cid = nidToCid.get(String(nodeId))
+      setLocalComponentId(typeof cid === 'number' ? cid : null)
+    } catch {
+      setLocalComponentId(null)
+    }
+  }, [selectedNode?.id, elements, computeComponents])
 
   // Hover preview support: remember viewport and active hovered component
   const prevViewRef = useRef<{ pan: { x: number; y: number }; zoom: number } | null>(null)
@@ -1604,7 +1671,46 @@ const CytoscapeNetwork = ({
                   <Box>
                     <HStack justify="space-between">
                       <Text fontWeight="bold">Component</Text>
-                      <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
+                      <HStack gap={2}>
+                        {((((typeof fixedComponentId === 'number') || (typeof selectedNodeInfo?.componentId === 'number')) && networkName && filename)) && (
+                          <Button
+                            size="xs"
+                            variant={savedFavoriteOnce ? 'solid' : 'outline'}
+                            disabled={savedFavoriteOnce || !effectiveComponentId || savingFavorite}
+                            loading={savingFavorite}
+                            onClick={async () => {
+                              if (savedFavoriteOnce) return
+                              if (!networkName || !filename) return
+                              const cid = effectiveComponentId
+                              if (typeof cid !== 'number') {
+                                // Ensure we request server component id before allowing save
+                                const id = selectedNode?.id
+                                if (id && !selectedNodeInfo && !nodeInfoLoading) await fetchNodeComponentInfo(id)
+                                return
+                              }
+                              try {
+                                setSavingFavorite(true)
+                                const baseUrl = OpenAPI.BASE || 'http://localhost'
+                                const token = localStorage.getItem('access_token') || ''
+                                const headers: Record<string,string> = { 'Content-Type': 'application/json' }
+                                if (token) headers['Authorization'] = `Bearer ${token}`
+                                const body = { network_name: networkName, filename, component_id: cid }
+                                const resp = await fetch(`${baseUrl}/api/v1/favorites`, { method: 'POST', headers, body: JSON.stringify(body) })
+                                if (!resp.ok) throw new Error('failed')
+                                setSavedFavoriteOnce(true)
+                              } catch {
+                                // ignore
+                              } finally {
+                                setSavingFavorite(false)
+                              }
+                            }}
+                            title={savedFavoriteOnce ? 'Saved' : 'Save as favorite'}
+                          >
+                            {savedFavoriteOnce ? 'Saved' : 'Save'}
+                          </Button>
+                        )}
+                        <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
+                      </HStack>
                     </HStack>
                     {isComponentOpen && <Text>Loading…</Text>}
                   </Box>
@@ -1612,7 +1718,45 @@ const CytoscapeNetwork = ({
                   <Box>
                     <HStack justify="space-between">
                       <Text fontWeight="bold">Component</Text>
-                      <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
+                      <HStack gap={2}>
+                        {((((typeof fixedComponentId === 'number') || (typeof selectedNodeInfo?.componentId === 'number')) && networkName && filename)) && (
+                          <Button
+                            size="xs"
+                            variant={savedFavoriteOnce ? 'solid' : 'outline'}
+                            disabled={savedFavoriteOnce || !effectiveComponentId || savingFavorite}
+                            loading={savingFavorite}
+                            onClick={async () => {
+                              if (savedFavoriteOnce) return
+                              if (!networkName || !filename) return
+                              const cid = effectiveComponentId
+                              if (typeof cid !== 'number') {
+                                const id = selectedNode?.id
+                                if (id && !selectedNodeInfo && !nodeInfoLoading) await fetchNodeComponentInfo(id)
+                                return
+                              }
+                              try {
+                                setSavingFavorite(true)
+                                const baseUrl = OpenAPI.BASE || 'http://localhost'
+                                const token = localStorage.getItem('access_token') || ''
+                                const headers: Record<string,string> = { 'Content-Type': 'application/json' }
+                                if (token) headers['Authorization'] = `Bearer ${token}`
+                                const body = { network_name: networkName, filename, component_id: cid, title: `Component ${cid}`, description: filename }
+                                const resp = await fetch(`${baseUrl}/api/v1/favorites`, { method: 'POST', headers, body: JSON.stringify(body) })
+                                if (!resp.ok) throw new Error('failed')
+                                setSavedFavoriteOnce(true)
+                              } catch {
+                                // optional: surface error
+                              } finally {
+                                setSavingFavorite(false)
+                              }
+                            }}
+                            title={savedFavoriteOnce ? 'Saved' : 'Save as favorite'}
+                          >
+                            {savedFavoriteOnce ? 'Saved' : 'Save'}
+                          </Button>
+                        )}
+                        <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
+                      </HStack>
                     </HStack>
                     {isComponentOpen && (
                       <Text>
