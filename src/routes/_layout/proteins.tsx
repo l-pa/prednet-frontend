@@ -51,6 +51,9 @@ const ProteinsPage = () => {
   const [loadingProteins, setLoadingProteins] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
   const [selectedProteins, setSelectedProteins] = useState<Set<string>>(new Set())
+  // Applied filters used for fetching/paging (decoupled from live edits)
+  const [appliedSelected, setAppliedSelected] = useState<Set<string>>(new Set())
+  const [appliedQuery, setAppliedQuery] = useState("")
   const [componentsLoading, setComponentsLoading] = useState(false)
   const [componentsResult, setComponentsResult] = useState<
     | null
@@ -60,6 +63,8 @@ const ProteinsPage = () => {
   >(null)
   const [panelsCollapsed, setPanelsCollapsed] = useState(false)
   const [subgraph, setSubgraph] = useState<null | { nodes: { data: Record<string, any> }[]; edges: { data: Record<string, any> }[] }>(null)
+  const [subgraphNetworkName, setSubgraphNetworkName] = useState<string | null>(null)
+  const [subgraphFilename, setSubgraphFilename] = useState<string | null>(null)
   const [subgraphOpen, setSubgraphOpen] = useState(false)
   const [subgraphDistribution, setSubgraphDistribution] = useState<ProteinDistributionItem[] | null>(null)
   const [proteinFilesMap, setProteinFilesMap] = useState<Record<string, string[]>>({})
@@ -134,8 +139,11 @@ const ProteinsPage = () => {
     setProteins(null)
     setPage(1)
     setSelectedProteins(new Set())
+    setAppliedSelected(new Set())
     setComponentsResult(null)
-    fetchProteins(networkName, 1, searchQuery, Array.from(selectedProteins).join(" "))
+    // Use applied filters; after switching networks we keep the current search text
+    const selectedParam = Array.from(new Set<string>()).join(" ")
+    fetchProteins(networkName, 1, searchQuery, selectedParam)
   }
 
   const totalPages = proteins ? Math.max(1, Math.ceil(proteins.total / proteins.size)) : 1
@@ -144,7 +152,11 @@ const ProteinsPage = () => {
     if (!selectedNetwork) return
     setPage(1)
     setComponentsResult(null)
-    fetchProteins(selectedNetwork, 1, searchQuery, Array.from(selectedProteins).join(" "))
+    // Apply search; when selection is applied, ignore text filter
+    setAppliedQuery(searchQuery)
+    const selectedParam = Array.from(appliedSelected).join(" ")
+    const qParam = appliedSelected.size > 0 ? "" : searchQuery
+    fetchProteins(selectedNetwork, 1, qParam, selectedParam)
   }
 
   const onClearSearch = () => {
@@ -153,30 +165,35 @@ const ProteinsPage = () => {
       return
     }
     setSearchQuery("")
+    setAppliedQuery("")
     setPage(1)
     setSelectedProteins(new Set())
     setComponentsResult(null)
-    fetchProteins(selectedNetwork, 1, "", Array.from(selectedProteins).join(" "))
+    // Keep applied selection; just clear search
+    const selectedParam = Array.from(appliedSelected).join(" ")
+    fetchProteins(selectedNetwork, 1, "", selectedParam)
   }
 
   const toggleProtein = (protein: string) => {
+    // Only update local selection; do not fetch automatically
     setSelectedProteins((prev) => {
       const next = new Set(prev)
       if (next.has(protein)) next.delete(protein)
       else next.add(protein)
       return next
     })
-    if (selectedNetwork) {
-      const nextSelected = new Set(selectedProteins)
-      if (nextSelected.has(protein)) nextSelected.delete(protein)
-      else nextSelected.add(protein)
-      const selectedParam = Array.from(nextSelected).join(" ")
-      // When there is any selection, ignore the text search filter so that
-      // the list includes all proteins that co-occur in the same components
-      // with the selected protein(s).
-      const q = nextSelected.size > 0 ? "" : searchQuery
-      fetchProteins(selectedNetwork, 1, q, selectedParam)
-    }
+  }
+
+  const applySelectionToList = () => {
+    if (!selectedNetwork) return
+    // Apply current selection to fetching state and refresh page 1
+    const nextApplied = new Set(selectedProteins)
+    setAppliedSelected(nextApplied)
+    setPage(1)
+    setComponentsResult(null)
+    const selectedParam = Array.from(nextApplied).join(" ")
+    const qParam = nextApplied.size > 0 ? "" : appliedQuery
+    fetchProteins(selectedNetwork, 1, qParam, selectedParam)
   }
 
   const fetchComponents = async () => {
@@ -451,6 +468,9 @@ const ProteinsPage = () => {
                         <Button size="sm" onClick={onClearSearch} variant="ghost">
                           Clear
                         </Button>
+                        <Button size="sm" onClick={applySelectionToList} variant="solid" disabled={!selectedNetwork}>
+                          Update list
+                        </Button>
                       </HStack>
                     )}
                     {selectedNetwork && proteins && (
@@ -483,7 +503,7 @@ const ProteinsPage = () => {
                                 align="center"
                                 justify="space-between"
                               >
-                                <HStack gap={3} align="center" onClick={() => toggleProtein(item.protein)} cursor="pointer">
+                                <HStack gap={3} align="center">
                                   <Checkbox.Root
                                     checked={selectedProteins.has(item.protein)}
                                     onCheckedChange={(e) => {
@@ -496,7 +516,22 @@ const ProteinsPage = () => {
                                       })
                                     }}
                                   >
-                                    <Checkbox.Control aria-label={`Select ${item.protein}`} />
+                                    <Checkbox.Control
+                                      aria-label={`Select ${item.protein}`}
+                                      onClick={(e) => {
+                                        // Ensure clicking the box toggles reliably
+                                        e.preventDefault()
+                                        e.stopPropagation()
+                                        setSelectedProteins((prev) => {
+                                          const next = new Set(prev)
+                                          if (next.has(item.protein)) next.delete(item.protein)
+                                          else next.add(item.protein)
+                                          return next
+                                        })
+                                      }}
+                                    >
+                                      <Checkbox.Indicator />
+                                    </Checkbox.Control>
                                   </Checkbox.Root>
                                   <Text
                                     fontWeight={500}
@@ -570,8 +605,9 @@ const ProteinsPage = () => {
                           size="sm"
                           onClick={() => {
                             if (!selectedNetwork) return
-                            const selectedParam = Array.from(selectedProteins).join(" ")
-                            const qParam = selectedProteins.size > 0 ? "" : searchQuery
+                            // Use applied filters for paging
+                            const selectedParam = Array.from(appliedSelected).join(" ")
+                            const qParam = appliedSelected.size > 0 ? "" : appliedQuery
                             fetchProteins(selectedNetwork, page - 1, qParam, selectedParam)
                           }}
                           disabled={page <= 1}
@@ -586,8 +622,8 @@ const ProteinsPage = () => {
                           size="sm"
                           onClick={() => {
                             if (!selectedNetwork) return
-                            const selectedParam = Array.from(selectedProteins).join(" ")
-                            const qParam = selectedProteins.size > 0 ? "" : searchQuery
+                            const selectedParam = Array.from(appliedSelected).join(" ")
+                            const qParam = appliedSelected.size > 0 ? "" : appliedQuery
                             fetchProteins(selectedNetwork, page + 1, qParam, selectedParam)
                           }}
                           disabled={page >= totalPages}
@@ -676,6 +712,9 @@ const ProteinsPage = () => {
                                               }
                                             }
                                           } catch { /* ignore */ }
+                                          // Track context so the subgraph view and node drawer can compute network-wide stats
+                                          setSubgraphNetworkName(selectedNetwork)
+                                          setSubgraphFilename(f.filename)
                                         } catch (e) {
                                           showErrorToast("Failed to fetch subgraph")
                                         }
@@ -722,6 +761,8 @@ const ProteinsPage = () => {
                     minZoom={0.1}
                     maxZoom={3}
                     disableComponentTapHighlight
+                    networkName={subgraphNetworkName || undefined}
+                    filename={subgraphFilename || undefined}
                   />
                 </Box>
                 <Box borderWidth="1px" borderRadius="md" p={3} bg="white" _dark={{ bg: "blackAlpha.600" }}>
@@ -755,4 +796,3 @@ export const Route = createFileRoute("/_layout/proteins")({
 })
 
 export default ProteinsPage
-
