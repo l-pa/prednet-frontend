@@ -18,6 +18,9 @@ import { FiDownload, FiGlobe, FiChevronUp, FiChevronDown } from "react-icons/fi"
 import useCustomToast from "@/hooks/useCustomToast"
 import { OpenAPI } from "@/client"
 import CytoscapeNetwork from "@/components/Networks/CytoscapeNetwork"
+import SigmaNetwork from "@/components/Networks/SigmaNetwork"
+import ReagraphNetwork from "@/components/Networks/ReagraphNetwork"
+import GraphinNetwork from "@/components/Networks/GraphinNetwork"
 
 // Types for the networks API
 interface NetworkInfo {
@@ -50,6 +53,37 @@ const NetworksPage = () => {
   const [graphLoadStep, setGraphLoadStep] = useState<string | null>(null)
   const [panelsCollapsed, setPanelsCollapsed] = useState(false)
   const { showErrorToast } = useCustomToast()
+  const [renderer, setRenderer] = useState<"cytoscape" | "sigma" | "reagraph">(() => {
+    try {
+      const stored = localStorage.getItem("network.renderer")
+      return (stored === "sigma" || stored === "cytoscape" || stored === "reagraph") ? (stored as any) : "cytoscape"
+    } catch {
+      return "cytoscape"
+    }
+  })
+
+  useEffect(() => {
+    try { localStorage.setItem("network.renderer", renderer) } catch {}
+  }, [renderer])
+
+  // React to changes from Settings dialog or other tabs
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      try {
+        if (!e.key || e.key === 'network.renderer') {
+          const r = localStorage.getItem('network.renderer') as any
+          setRenderer((r === 'sigma' || r === 'cytoscape' || r === 'reagraph') ? r : 'cytoscape')
+        }
+      } catch {}
+    }
+    const onCustom = () => onStorage(new StorageEvent('storage', { key: 'network.renderer' }))
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('network-renderer-changed', onCustom as any)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('network-renderer-changed', onCustom as any)
+    }
+  }, [])
 
   // Fetch networks
   const fetchNetworks = async () => {
@@ -271,16 +305,39 @@ const NetworksPage = () => {
                   )}
                 </Flex>
               ) : (
-                <CytoscapeNetwork
-                  data={graphData}
-                  height="600px"
-                  wheelSensitivity={2.5}
-                  minZoom={0.1}
-                  maxZoom={3}
-                  autoRunLayout={false}
-                  networkName={selectedNetwork || undefined}
-                  filename={selectedFile || undefined}
-                />
+                (
+                  renderer === "cytoscape" ? (
+                    <CytoscapeNetwork
+                      data={graphData}
+                      height="600px"
+                      wheelSensitivity={2.5}
+                      minZoom={0.1}
+                      maxZoom={3}
+                      autoRunLayout={false}
+                      networkName={selectedNetwork || undefined}
+                      filename={selectedFile || undefined}
+                    />
+                  ) : renderer === "sigma" ? (
+                    <SigmaNetwork
+                      data={graphData}
+                      height="600px"
+                    />
+                  ) : renderer === "reagraph" ? (
+                    <ReagraphNetwork
+                      data={graphData}
+                      height="600px"
+                      networkName={selectedNetwork || undefined}
+                      filename={selectedFile || undefined}
+                    />
+                  ) : (
+                    <GraphinNetwork
+                      data={graphData}
+                      height="600px"
+                      networkName={selectedNetwork || undefined}
+                      filename={selectedFile || undefined}
+                    />
+                  )
+                )
               )}
             </Card.Body>
           </Card.Root>

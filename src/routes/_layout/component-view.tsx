@@ -17,7 +17,10 @@ import { useEffect, useMemo, useState } from "react"
 import { z } from "zod"
 import { FiArrowLeft } from "react-icons/fi"
 
+import SigmaNetwork from "@/components/Networks/SigmaNetwork"
 import CytoscapeNetwork from "@/components/Networks/CytoscapeNetwork"
+import ReagraphNetwork from "@/components/Networks/ReagraphNetwork"
+import GraphinNetwork from "@/components/Networks/GraphinNetwork"
 import ProteinDistributionList from "@/components/Networks/ProteinDistributionList"
 import { OpenAPI } from "@/client"
 
@@ -43,6 +46,14 @@ function ComponentView() {
   const [sgdAnnotations, setSgdAnnotations] = useState<Record<string, string>>({})
   const [exists, setExists] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [renderer, setRenderer] = useState<'cytoscape' | 'sigma' | 'reagraph' | 'graphin'>(() => {
+    try {
+      const stored = localStorage.getItem('network.renderer')
+      return (stored === 'sigma' || stored === 'cytoscape' || stored === 'reagraph' || stored === 'graphin') ? stored : 'cytoscape'
+    } catch {
+      return 'cytoscape'
+    }
+  })
 
   const baseUrl = useMemo(() => OpenAPI.BASE || "http://localhost", [])
 
@@ -125,10 +136,33 @@ function ComponentView() {
   }
 
   useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      try {
+        if (!e.key || e.key === 'network.renderer') {
+          const r = localStorage.getItem('network.renderer')
+          setRenderer((r === 'sigma' || r === 'cytoscape' || r === 'reagraph' || r === 'graphin') ? r : 'cytoscape')
+        }
+        if (!e.key || e.key === 'network.style') {
+          setStyleNonce((n) => n + 1)
+        }
+      } catch {}
+    }
+    const onCustom = () => onStorage(new StorageEvent('storage', { key: 'network.renderer' }))
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('network-renderer-changed', onCustom as any)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('network-renderer-changed', onCustom as any)
+    }
+  }, [])
+
+  useEffect(() => {
     const run = async () => {
       setLoading(true)
       setError(null)
       try {
+        // Check favorite status ASAP so UI can reflect "Saved" promptly
+        await checkFavorite()
         const nameMode = (() => {
           try { const raw = localStorage.getItem('network.style'); const parsed = raw ? JSON.parse(raw) : {}; return parsed?.nameMode === 'gene' ? 'gene' : 'systematic' } catch { return 'systematic' }
         })()
@@ -137,9 +171,9 @@ function ComponentView() {
         const data = await resp.json()
         setGraph(data)
         computeAnalysis(data.nodes || [], data.edges || [])
-        const tops = (data.nodes || []).slice(0, 50).flatMap((n: any) => String(n?.data?.label ?? '').split(/\s+/).filter(Boolean))
-        await fetchAnnotations(Array.from(new Set(tops)).slice(0, 50))
-        await checkFavorite()
+        const tops = ((data.nodes || []).slice(0, 50).flatMap((n: any) => String(n?.data?.label ?? '').split(/\s+/).filter(Boolean))) as string[]
+        const uniq = Array.from(new Set<string>(tops)).slice(0, 50)
+        await fetchAnnotations(uniq)
       } catch (e: any) {
         setError(e?.message || 'Unknown error')
       } finally {
@@ -175,18 +209,40 @@ function ComponentView() {
           <Card.Body>
             <Grid templateColumns={{ base: '1fr', xl: '2fr 1fr' }} gap={4} alignItems="stretch">
               <Box minH="70vh">
-                <CytoscapeNetwork
-                  data={graph}
-                  height="70vh"
-                  wheelSensitivity={2.5}
-                  minZoom={0.1}
-                  maxZoom={3}
-                  disableComponentTapHighlight
-                  networkName={network}
-                  filename={filename}
-                  initialFavoriteExists={exists}
-                  fixedComponentId={id}
-                />
+                {renderer === 'cytoscape' ? (
+                  <CytoscapeNetwork
+                    data={graph}
+                    height="70vh"
+                    wheelSensitivity={2.5}
+                    networkName={network}
+                    filename={filename}
+                    initialFavoriteExists={exists}
+                    fixedComponentId={id}
+                  />
+                ) : renderer === 'sigma' ? (
+                  <SigmaNetwork
+                    data={graph}
+                    height="70vh"
+                    networkName={network}
+                    filename={filename}
+                    initialFavoriteExists={exists}
+                    fixedComponentId={id}
+                  />
+                ) : renderer === 'reagraph' ? (
+                  <ReagraphNetwork
+                    data={graph}
+                    height="70vh"
+                    networkName={network}
+                    filename={filename}
+                  />
+                ) : (
+                  <GraphinNetwork
+                    data={graph}
+                    height="70vh"
+                    networkName={network}
+                    filename={filename}
+                  />
+                )}
               </Box>
               <Box borderWidth="1px" borderRadius="md" p={3} bg="white" _dark={{ bg: 'blackAlpha.600' }}>
                 <VStack align="stretch" gap={4} fontSize="sm">

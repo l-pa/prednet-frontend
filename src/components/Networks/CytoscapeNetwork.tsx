@@ -1,5 +1,18 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import cytoscape, { type ElementDefinition } from "cytoscape"
+// Register worker-capable/efficient layouts when available
+try {
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const fcose = require('cytoscape-fcose')
+  if (fcose) {
+    try { (cytoscape as any).use(fcose) } catch {}
+  }
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const coseBilkent = require('cytoscape-cose-bilkent')
+  if (coseBilkent) {
+    try { (cytoscape as any).use(coseBilkent) } catch {}
+  }
+} catch {}
 import { Box, Button, HStack, Stack, Text, Tooltip, Badge, Spinner } from "@chakra-ui/react"
 import { FiPlay, FiRefreshCw, FiHash, FiPercent, FiSettings, FiTarget } from "react-icons/fi"
 import {
@@ -12,6 +25,8 @@ import {
 } from "@/components/ui/drawer"
 import { Checkbox } from "@/components/ui/checkbox"
 import { OpenAPI } from "@/client"
+import CytoscapeToolbar from "@/components/Networks/Cytoscape/CytoscapeToolbar"
+import CytoscapeSidebar from "@/components/Networks/Cytoscape/CytoscapeSidebar"
 
 type CytoscapeNode = {
   data: Record<string, any>
@@ -360,7 +375,7 @@ const CytoscapeNetwork = ({
     }
   }, [selectedNodeLiveLabel, tokenize])
 
-  // Keep nameMode in sync with global changes
+  // Keep some global style options in sync across components
   useEffect(() => {
     const handler = () => {
       try {
@@ -368,6 +383,11 @@ const CytoscapeNetwork = ({
         const parsed = raw ? JSON.parse(raw) : {}
         const v = parsed?.nameMode
         setNameMode(v === 'gene' ? 'gene' : 'systematic')
+        if (typeof parsed?.showLabels === 'boolean') setShowLabels(!!parsed.showLabels)
+        if (typeof parsed?.nodeScale === 'number') setNodeScale(Math.min(2, Math.max(0.1, parsed.nodeScale)))
+        if (typeof parsed?.edgeScale === 'number') setEdgeScale(Math.min(2, Math.max(0.1, parsed.edgeScale)))
+        if (typeof parsed?.enableHoverInfo === 'boolean') setEnableHoverInfo(!!parsed.enableHoverInfo)
+        if (typeof parsed?.selectedBorderWidth === 'number') setSelectedBorderWidth(Math.min(20, Math.max(0, parsed.selectedBorderWidth)))
       } catch {}
     }
     window.addEventListener('network-style-changed', handler as any)
@@ -491,6 +511,8 @@ const CytoscapeNetwork = ({
     "concentric",
     "breadthfirst",
     "cose",
+    "fcose",
+    "cose-bilkent",
     "concentric-attribute",
   ]
 
@@ -527,6 +549,13 @@ const CytoscapeNetwork = ({
       .filter((v) => Number.isFinite(v)) as number[]
     if (values.length === 0) return { min: 0, max: 1 }
     return { min: Math.min(...values), max: Math.max(...values) }
+  }, [data])
+
+  // Heuristic: treat very large graphs specially to keep UI responsive
+  const isBigGraph = useMemo(() => {
+    const n = (data.nodes || []).length
+    const m = (data.edges || []).length
+    return n >= 1500 || m >= 3000
   }, [data])
 
   const networkStats = useMemo(() => {
@@ -788,7 +817,8 @@ const CytoscapeNetwork = ({
       cyRef.current = null
     }
 
-    cyRef.current = cytoscape({
+    // Prefer WebGL renderer when available; fall back to canvas if not registered
+    const baseInit = {
       container: containerRef.current,
       elements: [],
       // Keep initial style simple; data-driven mappings are applied in follow-up effects
@@ -921,9 +951,27 @@ const CytoscapeNetwork = ({
       // Renderer performance hints
       pixelRatio: 1,
       textureOnViewport: true,
-      hideEdgesOnViewport: false,
+      hideEdgesOnViewport: isBigGraph ? true : false,
       hideLabelsOnViewport: true,
       motionBlur: true,
+    } as const
+
+    // Enable WebGL mode on the canvas renderer per Cytoscape guidance
+    cyRef.current = cytoscape({
+      ...(baseInit as any),
+      renderer: {
+        name: 'canvas',
+        // turn on WebGL-backed rendering
+        webgl: false,
+        // optional diagnostics; set to true to debug
+        showFps: false,
+        webglDebug: false,
+        // provisional tuning knobs; safe defaults
+        webglTexSize: 4096,
+        webglTexRows: 24,
+        webglBatchSize: 2048,
+        webglTexPerBatch: 16,
+      } as any,
     })
 
     const cy = cyRef.current
@@ -972,6 +1020,7 @@ const CytoscapeNetwork = ({
     // Hover handlers: show node labels on hover
     const onMouseOverNode = (evt: cytoscape.EventObject) => {
       if (!enableHoverInfoRef.current) return
+      if (isBigGraph && cy.zoom() < 0.5) return
       try { evt.target.addClass("hovered") } catch {}
     }
     const onMouseOutNode = (evt: cytoscape.EventObject) => {
@@ -984,6 +1033,8 @@ const CytoscapeNetwork = ({
     const onMouseOverEdge = (evt: cytoscape.EventObject) => {
       if (highlightActiveRef.current) return
       if (!enableHoverInfoRef.current) return
+      if (isBigGraph) return
+      if (cy.zoom() < 0.6) return
       try {
         const e = evt.target
         const sid = String(e.data("source"))
@@ -1015,8 +1066,10 @@ const CytoscapeNetwork = ({
         e.data("targetLabel", "")
       } catch {}
     }
-    cy.on("mouseover", "edge", onMouseOverEdge)
-    cy.on("mouseout", "edge", onMouseOutEdge)
+    if (!isBigGraph) {
+      cy.on("mouseover", "edge", onMouseOverEdge)
+      cy.on("mouseout", "edge", onMouseOutEdge)
+    }
     // Background tap clears highlight and closes drawer
     const onTapBg = (evt: cytoscape.EventObject) => {
       if (evt.target === cy) {
@@ -1044,8 +1097,10 @@ const CytoscapeNetwork = ({
       cy?.off("tap", onTapBg)
       cy?.off("mouseover", "node", onMouseOverNode)
       cy?.off("mouseout", "node", onMouseOutNode)
-      cy?.off("mouseover", "edge", onMouseOverEdge)
-      cy?.off("mouseout", "edge", onMouseOutEdge)
+      if (!isBigGraph) {
+        cy?.off("mouseover", "edge", onMouseOverEdge)
+        cy?.off("mouseout", "edge", onMouseOutEdge)
+      }
       if (cyRef.current) {
         cyRef.current.destroy()
         cyRef.current = null
@@ -1074,13 +1129,13 @@ const CytoscapeNetwork = ({
     const cy = cyRef.current
     if (!cy) return
     const style = cy.style()
-    const suppress = highlightProteins.size > 0
     // Keep label content controlled by stylesheet/classes; avoid element-level bypasses
+    // Always reflect the explicit showLabels toggle (do not suppress due to highlights)
     style
       .selector("node")
       .style({
-        'text-opacity': suppress ? 0 : (showLabels ? 1 : 0),
-        'min-zoomed-font-size': suppress ? 8 : (showLabels ? 0 : 8),
+        'text-opacity': showLabels ? 1 : 0,
+        'min-zoomed-font-size': showLabels ? 0 : 8,
       })
       .update()
     // Ensure hovered rule wins by making it the latest updated selector
@@ -1091,7 +1146,7 @@ const CytoscapeNetwork = ({
         'min-zoomed-font-size': 0,
       })
       .update()
-  }, [showLabels, highlightProteins])
+  }, [showLabels])
 
   // Scale node and edge sizes dynamically without re-initializing Cytoscape or re-running layouts
   useEffect(() => {
@@ -1226,7 +1281,14 @@ const CytoscapeNetwork = ({
             fit: false,
           }).run()
         } else {
-          cy.layout({ name: selectedLayout as any, animate: false, fit: false }).run()
+          const name = selectedLayout as any
+          const common = { animate: false, fit: false } as any
+          const opts = name === 'fcose'
+            ? { name, quality: 'default', randomize: true, packComponents: true, nodeSeparation: 75, uniformNodeDimensions: false, ...common }
+            : name === 'cose-bilkent'
+            ? { name, quality: 'default', randomize: true, gravity: 1, idealEdgeLength: 80, nodeRepulsion: 4500, ...common }
+            : { name, ...common }
+          try { cy.layout(opts).run() } catch { cy.layout({ name: selectedLayout as any, animate: false, fit: false }).run() }
         }
       } else if (fitOnInit && wasEmpty) {
         cy.fit(undefined, 20)
@@ -1274,7 +1336,14 @@ const CytoscapeNetwork = ({
         cy.fit(undefined, 20)
       }
       cy.one('layoutstop', onStop)
-      cy.layout({ name: selectedLayout as any, animate: false, fit: false }).run()
+      const name = selectedLayout as any
+      const common = { animate: false, fit: false, worker: true } as any
+      const opts = name === 'fcose'
+        ? { name, quality: 'default', randomize: true, packComponents: true, nodeSeparation: 75, uniformNodeDimensions: false, ...common }
+        : name === 'cose-bilkent'
+        ? { name, quality: 'default', randomize: true, gravity: 1, idealEdgeLength: 80, nodeRepulsion: 4500, ...common }
+        : { name, ...common }
+      try { cy.layout(opts).run() } catch { cy.layout({ name: selectedLayout as any, animate: false, fit: false }).run() }
     }
   }, [selectedLayout])
 
@@ -1337,104 +1406,21 @@ const CytoscapeNetwork = ({
 
   return (
     <Box position="relative" width="100%" height={typeof height === "number" ? `${height}px` : height}>
-      {showControls && (
-        <HStack
-          gap={2}
-          position="absolute"
-          top={2}
-          right={2}
-          zIndex={1}
-          bg="whiteAlpha.800"
-          _dark={{ bg: "blackAlpha.600" }}
-          px={2}
-          py={1}
-          rounded="md"
-          boxShadow="md"
-        >
-          <HStack gap={1}>
-            <Text fontSize="xs">Layout</Text>
-            <select
-              value={selectedLayout}
-              onChange={(e: React.ChangeEvent<HTMLSelectElement>) => setSelectedLayout(e.target.value)}
-              style={{
-                fontSize: "12px",
-                padding: "2px 6px",
-                borderRadius: 6,
-                border: "1px solid rgba(0,0,0,0.1)",
-                background: "transparent",
-              }}
-            >
-              {availableLayouts.map((l) => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
-            </select>
-          </HStack>
-          <HStack gap={1}>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => {
-                setIsStylePanelOpen((v) => !v)
-                setIsInfoPanelOpen(false)
-              }}
-            >
-              Style
-            </Button>
-            <Button
-              size="xs"
-              variant="outline"
-              onClick={() => {
-                setIsInfoPanelOpen((v) => !v)
-                setIsStylePanelOpen(false)
-              }}
-            >
-              Info
-            </Button>
-          </HStack>
-          <Tooltip.Root openDelay={200}>
-            <Tooltip.Trigger>
-              <Button size="xs" onClick={handleRunLayout}>
-                <HStack gap={1}>
-                  <FiPlay />
-                  <span>Run layout</span>
-                </HStack>
-              </Button>
-            </Tooltip.Trigger>
-            <Tooltip.Positioner>
-              <Tooltip.Content>
-                <Tooltip.Arrow />
-                <Text fontSize="xs">Calculated in your browser. Large graphs may be slow and could freeze the tab.</Text>
-              </Tooltip.Content>
-            </Tooltip.Positioner>
-          </Tooltip.Root>
-            <Tooltip.Root openDelay={200}>
-            <Tooltip.Trigger>
-          {/* <Button size="xs" onClick={handleRunLayoutBackend} variant="outline" disabled={runningBackend}>
-
-            <HStack gap={1}>
-              <FiPlay />
-              <span>Run layout (backend)</span>
-              <Badge colorScheme="purple" variant="subtle" ml={1}>Experimental</Badge>
-            </HStack>
-          </Button> */}
-            </Tooltip.Trigger>
-            <Tooltip.Positioner>
-              <Tooltip.Content>
-                <Tooltip.Arrow />
-                <Text fontSize="xs">Calculated on the server, using the spring layout algorithm.</Text>
-                </Tooltip.Content>
-              </Tooltip.Positioner>
-            </Tooltip.Root>
-          <Button size="xs" onClick={handleResetView} variant="outline">
-            <HStack gap={1}>
-              <FiRefreshCw />
-              <span>Reset view</span>
-            </HStack>
-          </Button>
-        </HStack>
-      )}
+      <CytoscapeToolbar
+        showControls={showControls}
+        selectedLayout={selectedLayout}
+        onChangeSelectedLayout={(v) => setSelectedLayout(v)}
+        onToggleStylePanel={() => {
+          setIsStylePanelOpen((v) => !v)
+          setIsInfoPanelOpen(false)
+        }}
+        onToggleInfoPanel={() => {
+          setIsInfoPanelOpen((v) => !v)
+          setIsStylePanelOpen(false)
+        }}
+        onRunLayout={handleRunLayout}
+        onResetView={handleResetView}
+      />
       {isStylePanelOpen && (
         <Box
           position="absolute"
@@ -1648,831 +1634,49 @@ const CytoscapeNetwork = ({
         </Box>
       )}
 
-      {/* Right-side drawer for node details */}
-      <DrawerRoot open={isDrawerOpen} onOpenChange={(e) => setIsDrawerOpen(e.open)} placement="end" modal={false} closeOnInteractOutside={false} trapFocus={false}>
-        <DrawerContent maxW="sm">
-          <DrawerHeader>
-            <DrawerTitle>Node details</DrawerTitle>
-            <DrawerCloseTrigger />
-          </DrawerHeader>
-          <DrawerBody>
-            {selectedNode ? (
-              <Stack gap={3} fontSize="sm">
-                <Box>
-                  <HStack justify="space-between">
-                    <Text fontWeight="bold">ID</Text>
-                    <Button size="xs" variant="ghost" onClick={() => setIsIdOpen((v) => !v)}>{isIdOpen ? "Hide" : "Show"}</Button>
-                  </HStack>
-                  {isIdOpen && (
-                    <Text>{selectedNode.id}</Text>
-                  )}
-                </Box>
-                {nodeInfoLoading ? (
-                  <Box>
-                    <HStack justify="space-between">
-                      <Text fontWeight="bold">Component</Text>
-                      <HStack gap={2}>
-                        {((((typeof fixedComponentId === 'number') || (typeof selectedNodeInfo?.componentId === 'number')) && networkName && filename)) && (
-                          <Button
-                            size="xs"
-                            variant={savedFavoriteOnce ? 'solid' : 'outline'}
-                            disabled={savedFavoriteOnce || !effectiveComponentId || savingFavorite}
-                            loading={savingFavorite}
-                            onClick={async () => {
-                              if (savedFavoriteOnce) return
-                              if (!networkName || !filename) return
-                              const cid = effectiveComponentId
-                              if (typeof cid !== 'number') {
-                                // Ensure we request server component id before allowing save
-                                const id = selectedNode?.id
-                                if (id && !selectedNodeInfo && !nodeInfoLoading) await fetchNodeComponentInfo(id)
-                                return
-                              }
-                              try {
-                                setSavingFavorite(true)
-                                const baseUrl = OpenAPI.BASE || 'http://localhost'
-                                const token = localStorage.getItem('access_token') || ''
-                                const headers: Record<string,string> = { 'Content-Type': 'application/json' }
-                                if (token) headers['Authorization'] = `Bearer ${token}`
-                                const body = { network_name: networkName, filename, component_id: cid }
-                                const resp = await fetch(`${baseUrl}/api/v1/favorites`, { method: 'POST', headers, body: JSON.stringify(body) })
-                                if (!resp.ok) throw new Error('failed')
-                                setSavedFavoriteOnce(true)
-                              } catch {
-                                // ignore
-                              } finally {
-                                setSavingFavorite(false)
-                              }
-                            }}
-                            title={savedFavoriteOnce ? 'Saved' : 'Save as favorite'}
-                          >
-                            {savedFavoriteOnce ? 'Saved' : 'Save'}
-                          </Button>
-                        )}
-                        <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
-                      </HStack>
-                    </HStack>
-                    {isComponentOpen && <Text>Loading…</Text>}
-                  </Box>
-                ) : (selectedNodeInfo && (selectedNodeInfo.componentId !== undefined || selectedNodeInfo.componentSize !== undefined)) ? (
-                  <Box>
-                    <HStack justify="space-between">
-                      <Text fontWeight="bold">Component</Text>
-                      <HStack gap={2}>
-                        {((((typeof fixedComponentId === 'number') || (typeof selectedNodeInfo?.componentId === 'number')) && networkName && filename)) && (
-                          <Button
-                            size="xs"
-                            variant={savedFavoriteOnce ? 'solid' : 'outline'}
-                            disabled={savedFavoriteOnce || !effectiveComponentId || savingFavorite}
-                            loading={savingFavorite}
-                            onClick={async () => {
-                              if (savedFavoriteOnce) return
-                              if (!networkName || !filename) return
-                              const cid = effectiveComponentId
-                              if (typeof cid !== 'number') {
-                                const id = selectedNode?.id
-                                if (id && !selectedNodeInfo && !nodeInfoLoading) await fetchNodeComponentInfo(id)
-                                return
-                              }
-                              try {
-                                setSavingFavorite(true)
-                                const baseUrl = OpenAPI.BASE || 'http://localhost'
-                                const token = localStorage.getItem('access_token') || ''
-                                const headers: Record<string,string> = { 'Content-Type': 'application/json' }
-                                if (token) headers['Authorization'] = `Bearer ${token}`
-                                const body = { network_name: networkName, filename, component_id: cid, title: `Component ${cid}`, description: filename }
-                                const resp = await fetch(`${baseUrl}/api/v1/favorites`, { method: 'POST', headers, body: JSON.stringify(body) })
-                                if (!resp.ok) throw new Error('failed')
-                                setSavedFavoriteOnce(true)
-                              } catch {
-                                // optional: surface error
-                              } finally {
-                                setSavingFavorite(false)
-                              }
-                            }}
-                            title={savedFavoriteOnce ? 'Saved' : 'Save as favorite'}
-                          >
-                            {savedFavoriteOnce ? 'Saved' : 'Save'}
-                          </Button>
-                        )}
-                        <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
-                      </HStack>
-                    </HStack>
-                    {isComponentOpen && (
-                      <Text>
-                        {selectedNodeInfo.componentId !== undefined ? `#${selectedNodeInfo.componentId}` : ""}
-                        {selectedNodeInfo.componentId !== undefined && selectedNodeInfo.componentSize !== undefined ? " · " : ""}
-                        {selectedNodeInfo.componentSize !== undefined ? `${selectedNodeInfo.componentSize} nodes` : ""}
-                      </Text>
-                    )}
-                  </Box>
-                ) : (
-                  <Box>
-                    <HStack justify="space-between">
-                      <Text fontWeight="bold">Component</Text>
-                      <Button
-                        size="xs"
-                        variant="ghost"
-                        onClick={() => {
-                          setIsComponentOpen((v) => !v)
-                          const id = selectedNode?.id
-                          if (id && !selectedNodeInfo && !nodeInfoLoading) fetchNodeComponentInfo(id)
-                        }}
-                      >
-                        {isComponentOpen ? "Hide" : "Show"}
-                      </Button>
-                    </HStack>
-                    {isComponentOpen && <Text>Loading…</Text>}
-                  </Box>
-                )}
-                {/* Protein distribution (node label proteins) */}
-                <Box>
-                  <HStack justify="space-between">
-                    <HStack gap={1} align="center">
-                      <Text fontWeight="bold">Node distribution</Text>
-                      <Tooltip.Root openDelay={200}>
-                        <Tooltip.Trigger>
-                          <Button size="xs" variant="ghost" onClick={() => setIsNodeHighlightOptionsOpen((v) => !v)} title="Highlight options">
-                            <FiSettings />
-                          </Button>
-                        </Tooltip.Trigger>
-                        <Tooltip.Positioner>
-                          <Tooltip.Content>
-                            <Tooltip.Arrow />
-                            <Text fontSize="xs">Highlight options</Text>
-                          </Tooltip.Content>
-                        </Tooltip.Positioner>
-                      </Tooltip.Root>
-                    </HStack>
-                    <Button size="xs" variant="ghost" onClick={() => setIsNodeProteinOpen((v) => !v)}>{isNodeProteinOpen ? "Hide" : "Show"}</Button>
-                  </HStack>
-                  {isNodeHighlightOptionsOpen && (
-                    <Box>
-                      <Stack gap={2} mt={2}>
-                        <HStack gap={2} align="center" justify="space-between">
-                          <HStack gap={2} align="center">
-                            <Text fontSize="xs" opacity={0.8}>Match mode</Text>
-                            <Tooltip.Root openDelay={200}>
-                              <Tooltip.Trigger>
-                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                              </Tooltip.Trigger>
-                              <Tooltip.Positioner>
-                                <Tooltip.Content>
-                                  <Tooltip.Arrow />
-                                  <Text fontSize="xs">Choose whether a node must contain all selected proteins (AND) or any of them (OR).</Text>
-                                </Tooltip.Content>
-                              </Tooltip.Positioner>
-                            </Tooltip.Root>
-                          </HStack>
-                          <HStack gap={1}>
-                            <Button size="xs" variant={highlightMode === 'AND' ? 'solid' : 'outline'} onClick={() => setHighlightMode('AND')}>AND</Button>
-                            <Button size="xs" variant={highlightMode === 'OR' ? 'solid' : 'outline'} onClick={() => setHighlightMode('OR')}>OR</Button>
-                          </HStack>
-                        </HStack>
-                        <Checkbox
-                          checked={filterComponentsByProteins}
-                          onCheckedChange={({ checked }) => setFilterComponentsByProteins(!!checked)}
-                        >
-                          <Text fontSize="sm">Show only components matching filter</Text>
-                        </Checkbox>
-                        <HStack justify="flex-end">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                              const cy = cyRef.current
-                              if (cy) {
-                                try {
-                                  cy.batch(() => {
-                                    cy.nodes().forEach((n) => { n.data("proteinHighlight", 0); n.data("dim", 0) })
-                                  })
-                                } catch {}
-                              }
-                              setHighlightProteins(new Set())
-                              setExpandedProteins(new Set())
-                            }}
-                            disabled={highlightProteins.size === 0}
-                          >
-                            Clear highlights
-                          </Button>
-                        </HStack>
-                      </Stack>
-                    </Box>
-                  )}
-                  {isNodeProteinOpen && (
-                    <Box mt={2}>
-                      {nodeInfoLoading ? (
-                        <HStack gap={2} align="center">
-                          <Spinner size="xs" />
-                          <Text fontSize="sm">Loading proteins…</Text>
-                        </HStack>
-                      ) : selectedNodeInfo ? (
-                        (() => {
-                          const filtered = proteinCountsSorted.filter(({ protein }) => nodeLabelProteins.includes(protein))
-                          if (filtered.length === 0) return <Text opacity={0.7}>(no proteins in label)</Text>
-                          return (
-                            <Stack gap={3} overflowY="auto">
-                              {filtered.map(({ protein, count, type_counts, type_ratios, ratio, other_components }) => {
-                                const totalPct = Math.max(4, Math.round((count / proteinMaxCount) * 100))
-                                const parts = Object.entries(type_counts || {}).sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
-                                const sum = parts.reduce((acc, [, c]) => acc + c, 0) || 1
-                                const cy = cyRef.current
-                                let compMenu: Array<{ label: string, cid: number }> = []
-                                if (cy) {
-                                  const { nidToCid } = computeComponents(cy)
-                                  const compSet = new Set<number>()
-                                  cy.nodes().forEach((n) => {
-                                    const lbl = String(n.data("label") ?? "")
-                                    if (lbl.split(/\s+/).includes(protein)) {
-                                      const cid = nidToCid.get(n.id())
-                                      if (typeof cid === "number") compSet.add(cid)
-                                    }
-                                  })
-                                  let currentCid: number | undefined
-                                  if (selectedNode?.id) {
-                                    currentCid = nidToCid.get(String(selectedNode.id))
-                                    if (typeof currentCid === 'number') compSet.delete(currentCid)
-                                  }
-                                  compMenu = Array.from(compSet).sort((a, b) => a - b).map((cid) => ({ label: `Component #${cid}`, cid }))
-                                }
-                                return (
-                                  <Box key={`nlp-box-${protein}`} p={2} borderWidth="1px" rounded="md" bg="white" _dark={{ bg: 'blackAlpha.600' }}>
-                                    <Stack gap={1} mb={2}>
-                                      <HStack gap={2} align="center">
-                                        <Text fontSize="xs" opacity={0.8}>Protein</Text>
-                                        <Tooltip.Root openDelay={200}>
-                                          <Tooltip.Trigger>
-                                            <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                          </Tooltip.Trigger>
-                                          <Tooltip.Positioner>
-                                            <Tooltip.Content>
-                                              <Tooltip.Arrow />
-                                              <Text fontSize="xs">Toggle highlight for nodes containing this protein</Text>
-                                            </Tooltip.Content>
-                                          </Tooltip.Positioner>
-                                        </Tooltip.Root>
-                                      </HStack>
-                                      <HStack gap={2} align="center" justify="space-between">
-                                        <HStack gap={2} align="center">
-                                          <FiHash opacity={0.8} />
-                                          <Text fontWeight="semibold">{protein}</Text>
-                                        </HStack>
-                                        <HStack gap={2} align="center">
-                                          <Badge title="Total occurrences in component" variant="subtle" w="fit-content">{count}</Badge>
-                                          <Tooltip.Root openDelay={200}>
-                                            <Tooltip.Trigger>
-                                              <Button
-                                                size="2xs"
-                                                variant={highlightProteins.has(protein) ? 'solid' : 'outline'}
-                                                onClick={() => {
-                                                  setHighlightProteins((prev) => {
-                                                    const next = new Set(prev)
-                                                    if (next.has(protein)) next.delete(protein); else next.add(protein)
-                                                    return next
-                                                  })
-                                                }}
-                                                title="Toggle highlight"
-                                              >
-                                                <FiTarget />
-                                              </Button>
-                                            </Tooltip.Trigger>
-                                            <Tooltip.Positioner>
-                                              <Tooltip.Content>
-                                                <Tooltip.Arrow />
-                                                <Text fontSize="xs">Toggle highlight for nodes containing this protein</Text>
-                                              </Tooltip.Content>
-                                            </Tooltip.Positioner>
-                                          </Tooltip.Root>
-                                          <Button
-                                            size="2xs"
-                                            variant="outline"
-                                            onClick={() => {
-                                              setExpandedProteins((prev) => {
-                                                const next = new Set(prev)
-                                                if (next.has(protein)) next.delete(protein); else next.add(protein)
-                                                return next
-                                              })
-                                            }}
-                                          >
-                                            {expandedProteins.has(protein) ? 'Hide details' : 'Show details'}
-                                          </Button>
-                                        </HStack>
-                                      </HStack>
-                                    </Stack>
-
-                                    {expandedProteins.has(protein) && (
-                                      <>
-                                        <HStack gap={6} mb={2} align="flex-end">
-                                          <Stack gap={0} minW="120px">
-                                            <HStack gap={2} align="center">
-                                              <Text fontSize="xs" opacity={0.8}>Share of component</Text>
-                                              <Tooltip.Root openDelay={200}>
-                                                <Tooltip.Trigger>
-                                                  <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                                </Tooltip.Trigger>
-                                                <Tooltip.Positioner>
-                                                  <Tooltip.Content>
-                                                    <Tooltip.Arrow />
-                                                    <Text fontSize="xs">Percentage of nodes in this component that contain this protein.</Text>
-                                                  </Tooltip.Content>
-                                                </Tooltip.Positioner>
-                                              </Tooltip.Root>
-                                            </HStack>
-                                            <HStack gap={1} title="Share of nodes in component" opacity={0.9}>
-                                              <FiPercent />
-                                              <Text>{typeof ratio === 'number' ? `${Math.round(ratio * 100)}%` : '-'}</Text>
-                                            </HStack>
-                                          </Stack>
-
-                                          <Stack gap={0} minW="120px">
-                                            <HStack gap={2} align="center">
-                                              <Text fontSize="xs" opacity={0.8}>Count in component</Text>
-                                              <Tooltip.Root openDelay={200}>
-                                                <Tooltip.Trigger>
-                                                  <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                                </Tooltip.Trigger>
-                                                <Tooltip.Positioner>
-                                                  <Tooltip.Content>
-                                                    <Tooltip.Arrow />
-                                                    <Text fontSize="xs">Number of distinct nodes in this component that include this protein in their label.</Text>
-                                                  </Tooltip.Content>
-                                                </Tooltip.Positioner>
-                                              </Tooltip.Root>
-                                            </HStack>
-                                            <Badge title="Total occurrences in component" variant="subtle" w="fit-content">{count}</Badge>
-                                          </Stack>
-                                        </HStack>
-
-                                        <Stack gap={1} mb={2}>
-                                          <HStack gap={2} align="center">
-                                            <Text fontSize="xs" opacity={0.8}>Type distribution</Text>
-                                            <Tooltip.Root openDelay={200}>
-                                              <Tooltip.Trigger>
-                                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                              </Tooltip.Trigger>
-                                              <Tooltip.Positioner>
-                                                <Tooltip.Content>
-                                                  <Tooltip.Arrow />
-                                                  <Text fontSize="xs">How this protein occurs across node types for the component.</Text>
-                                                </Tooltip.Content>
-                                              </Tooltip.Positioner>
-                                            </Tooltip.Root>
-                                          </HStack>
-                                          <HStack gap={2} align="center">
-                                            <Box flex={1} bg="blackAlpha.200" _dark={{ bg: 'whiteAlpha.200' }} h="6px" rounded="sm" position="relative">
-                                              <Box position="absolute" left={0} top={0} bottom={0} width={`${totalPct}%`} bg="blackAlpha.500" _dark={{ bg: 'whiteAlpha.500' }} rounded="sm" />
-                                            </Box>
-                                            <Badge variant="outline" minW="40px" textAlign="center">{count}</Badge>
-                                          </HStack>
-                                          <HStack gap={2} wrap="wrap">
-                                            {parts.map(([type, c]) => {
-                                              const pct = Math.round((c / sum) * 100)
-                                              return (
-                                                <Badge key={`${protein}-type-${type}`} variant="subtle">{type}: {pct}%</Badge>
-                                              )
-                                            })}
-                                          </HStack>
-                                        </Stack>
-
-                                        <Stack gap={1}>
-                                          <HStack gap={2} align="center">
-                                            <Text fontSize="xs" opacity={0.8}>Other components</Text>
-                                            <Tooltip.Root openDelay={200}>
-                                              <Tooltip.Trigger>
-                                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                              </Tooltip.Trigger>
-                                              <Tooltip.Positioner>
-                                                <Tooltip.Content>
-                                                  <Tooltip.Arrow />
-                                                  <Text fontSize="xs">Components in the current graph where this protein also appears. Hover to preview, click to navigate.</Text>
-                                                </Tooltip.Content>
-                                              </Tooltip.Positioner>
-                                            </Tooltip.Root>
-                                          </HStack>
-                                          {typeof other_components === 'number' && other_components > 0 ? (
-                                            compMenu.length > 0 ? (
-                                              <HStack gap={1} wrap="wrap">
-                                                {compMenu.map((it) => (
-                                                  <Button
-                                                    key={`${protein}-comp-${it.cid}`}
-                                                    size="2xs"
-                                                    variant="outline"
-                                                    title={`Component #${it.cid}`}
-                                                    onMouseEnter={() => previewComponent(it.cid)}
-                                                    onMouseLeave={() => clearHoverPreview(it.cid)}
-                                                    onClick={() => {
-                                                      if (hoverRevertTimeoutRef.current) {
-                                                        window.clearTimeout(hoverRevertTimeoutRef.current)
-                                                        hoverRevertTimeoutRef.current = null
-                                                      }
-                                                      prevViewRef.current = null
-                                                      hoveredComponentRef.current = null
-                                                      highlightComponent(it.cid)
-                                                      setIsDrawerOpen(false)
-                                                    }}
-                                                  >
-                                                    #{it.cid}
-                                                  </Button>
-                                                ))}
-                                              </HStack>
-                                            ) : (
-                                              <Badge variant="outline">not found in current view</Badge>
-                                            )
-                                          ) : (
-                                            <Badge variant="outline">in {other_components ?? 0} comps</Badge>
-                                          )}
-                                        </Stack>
-                                      </>
-                                    )}
-                                  </Box>
-                                )
-                              })}
-                            </Stack>
-                          )
-                        })()
-                      ) : (
-                        <Text opacity={0.7}>(no data)</Text>
-                      )}
-                    </Box>
-                  )}
-                </Box>
-
-                {/* Component distribution */}
-
-                <Box>
-                  <HStack justify="space-between">
-                    <HStack gap={1} align="center">
-                      <Text fontWeight="bold">Component distribution</Text>
-                      <Tooltip.Root openDelay={200}>
-                        <Tooltip.Trigger>
-                          <Button size="xs" variant="ghost" onClick={() => setIsHighlightOptionsOpen((v) => !v)} title="Highlight options">
-                            <FiSettings />
-                          </Button>
-                        </Tooltip.Trigger>
-                        <Tooltip.Positioner>
-                          <Tooltip.Content>
-                            <Tooltip.Arrow />
-                            <Text fontSize="xs">Highlight options</Text>
-                          </Tooltip.Content>
-                        </Tooltip.Positioner>
-                      </Tooltip.Root>
-                    </HStack>
-                    <Button size="xs" variant="ghost" onClick={() => setIsDistributionOpen((v) => !v)}>{isDistributionOpen ? "Hide" : "Show"}</Button>
-                  </HStack>
-                  {isHighlightOptionsOpen && (
-                    <Box>
-                      <Stack gap={2} mt={2}>
-                        <HStack gap={2} align="center" justify="space-between">
-                          <HStack gap={2} align="center">
-                            <Text fontSize="xs" opacity={0.8}>Match mode</Text>
-                            <Tooltip.Root openDelay={200}>
-                              <Tooltip.Trigger>
-                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                              </Tooltip.Trigger>
-                              <Tooltip.Positioner>
-                                <Tooltip.Content>
-                                  <Tooltip.Arrow />
-                                  <Text fontSize="xs">Choose whether a node must contain all selected proteins (AND) or any of them (OR).</Text>
-                                </Tooltip.Content>
-                              </Tooltip.Positioner>
-                            </Tooltip.Root>
-                          </HStack>
-                          <HStack gap={1}>
-                            <Button size="xs" variant={highlightMode === 'AND' ? 'solid' : 'outline'} onClick={() => setHighlightMode('AND')}>AND</Button>
-                            <Button size="xs" variant={highlightMode === 'OR' ? 'solid' : 'outline'} onClick={() => setHighlightMode('OR')}>OR</Button>
-                          </HStack>
-                        </HStack>
-                        <Checkbox
-                          checked={filterComponentsByProteins}
-                          onCheckedChange={({ checked }) => setFilterComponentsByProteins(!!checked)}
-                        >
-                          <Text fontSize="sm">Show only components matching filter</Text>
-                        </Checkbox>
-                        <HStack justify="flex-end">
-                          <Button
-                            size="xs"
-                            variant="outline"
-                            onClick={() => {
-                              const cy = cyRef.current
-                              if (cy) {
-                                try {
-                                  cy.batch(() => {
-                                    cy.nodes().forEach((n) => { n.data("proteinHighlight", 0); n.data("dim", 0) })
-                                  })
-                                } catch {}
-                              }
-                              setHighlightProteins(new Set())
-                              setExpandedProteins(new Set())
-                            }}
-                            disabled={highlightProteins.size === 0}
-                          >
-                            Clear highlights
-                          </Button>
-                        </HStack>
-                      </Stack>
-                    </Box>
-                  )}
-                  {isDistributionOpen && (
-                    nodeInfoLoading ? (
-                      <HStack gap={2} align="center" mt={2}>
-                        <Spinner size="xs" />
-                        <Text fontSize="sm">Loading proteins…</Text>
-                      </HStack>
-                    ) : selectedNodeInfo ? (
-                      proteinCountsSorted.length === 0 ? (
-                        <Text opacity={0.7}>(no data)</Text>
-                      ) : (
-                          <Stack gap={3} overflowY="auto">
-                            {proteinCountsSorted.map(({ protein, count, type_counts, type_ratios, ratio, other_components, other_components_network }) => {
-                              const totalPct = Math.max(4, Math.round((count / proteinMaxCount) * 100))
-                              const parts = Object.entries(type_counts || {}).sort((a, b) => (b[1] - a[1]) || a[0].localeCompare(b[0]))
-                              const sum = parts.reduce((acc, [, c]) => acc + c, 0) || 1
-                              // Build component menu items by scanning graph components where this protein appears
-                              const cy = cyRef.current
-                              let compMenu: Array<{ label: string, cid: number }> = []
-                              if (cy) {
-                                const { nidToCid } = computeComponents(cy)
-                                // find components that contain this protein token
-                                const compSet = new Set<number>()
-                                cy.nodes().forEach((n) => {
-                                  const lbl = String(n.data("label") ?? "")
-                                  if (lbl.split(/\s+/).includes(protein)) {
-                                    const cid = nidToCid.get(n.id())
-                                    if (typeof cid === "number") compSet.add(cid)
-                                  }
-                                })
-                                // Exclude current component (node clicked) if available
-                                let currentCid: number | undefined
-                                if (selectedNode?.id) {
-                                  currentCid = nidToCid.get(String(selectedNode.id))
-                                  if (typeof currentCid === 'number') compSet.delete(currentCid)
-                                }
-                                compMenu = Array.from(compSet).sort((a, b) => a - b).map((cid) => ({ label: `Component #${cid}`, cid }))
-                              }
-                              return (
-                                <Box key={`bar-${protein}`} p={3} borderWidth="1px" rounded="md" bg="white" _dark={{ bg: 'blackAlpha.600' }}>
-                                  {/* Header: Protein label, name, selection, and collapse toggle */}
-                                  <Stack gap={1} mb={2}>
-                                    <HStack gap={2} align="center">
-                                      <Text fontSize="xs" opacity={0.8}>Protein</Text>
-                                      <Tooltip.Root openDelay={200}>
-                                        <Tooltip.Trigger>
-                                          <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                        </Tooltip.Trigger>
-                                        <Tooltip.Positioner>
-                                          <Tooltip.Content>
-                                            <Tooltip.Arrow />
-                                            <Text fontSize="xs">A token extracted from node labels that identifies a protein.</Text>
-                                          </Tooltip.Content>
-                                        </Tooltip.Positioner>
-                                      </Tooltip.Root>
-                                    </HStack>
-                                    <HStack gap={2} align="center" justify="space-between">
-                                      <HStack gap={2} align="center">
-                                        <FiHash opacity={0.8} />
-                                        <Text fontWeight="semibold">{protein}</Text>
-                                      </HStack>
-                                      <HStack gap={2} align="center">
-                                        <Badge title="Total occurrences in component" variant="subtle" w="fit-content">{count}</Badge>
-                                        {typeof (other_components_network ?? other_components) === 'number' && (
-                                          <Tooltip.Root openDelay={200}>
-                                            <Tooltip.Trigger>
-                                              <Badge
-                                                variant="outline"
-                                                title={
-                                                  typeof other_components_network === 'number'
-                                                    ? "Distinct other components across the full network where this protein appears"
-                                                    : "Distinct other components in the current file/view where this protein appears"
-                                                }
-                                              >
-                                                in {(other_components_network ?? other_components)} comps
-                                              </Badge>
-                                            </Tooltip.Trigger>
-                                            <Tooltip.Positioner>
-                                              <Tooltip.Content>
-                                                <Tooltip.Arrow />
-                                                <Text fontSize="xs">{
-                                                  typeof other_components_network === 'number'
-                                                    ? 'Number of distinct components (excluding the current one) across all GDF files in this network that contain this protein.'
-                                                    : 'Number of distinct components (excluding the current one) in the current file/view that contain this protein.'
-                                                }</Text>
-                                              </Tooltip.Content>
-                                            </Tooltip.Positioner>
-                                          </Tooltip.Root>
-                                        )}
-                                        <Tooltip.Root openDelay={200}>
-                                          <Tooltip.Trigger>
-                                            <Button
-                                              size="2xs"
-                                              variant={highlightProteins.has(protein) ? 'solid' : 'outline'}
-                                              onClick={() => {
-                                                setHighlightProteins((prev) => {
-                                                  const next = new Set(prev)
-                                                  if (next.has(protein)) next.delete(protein); else next.add(protein)
-                                                  return next
-                                                })
-                                              }}
-                                              title="Toggle highlight"
-                                            >
-                                              <FiTarget />
-                                            </Button>
-                                          </Tooltip.Trigger>
-                                          <Tooltip.Positioner>
-                                            <Tooltip.Content>
-                                              <Tooltip.Arrow />
-                                              <Text fontSize="xs">Toggle highlight for nodes containing this protein</Text>
-                                            </Tooltip.Content>
-                                          </Tooltip.Positioner>
-                                        </Tooltip.Root>
-                                        <Button
-                                          size="2xs"
-                                          variant="outline"
-                                          onClick={() => {
-                                            setExpandedProteins((prev) => {
-                                              const next = new Set(prev)
-                                              if (next.has(protein)) next.delete(protein); else next.add(protein)
-                                              return next
-                                            })
-                                          }}
-                                        >
-                                          {expandedProteins.has(protein) ? 'Hide details' : 'Show details'}
-                                        </Button>
-                                      </HStack>
-                                    </HStack>
-                                  </Stack>
-
-                                  {expandedProteins.has(protein) && (
-                                    <>
-                                      {/* Metrics: Share and Count */}
-                                      <HStack gap={6} mb={2} align="flex-end">
-                                        <Stack gap={0} minW="120px">
-                                          <HStack gap={2} align="center">
-                                            <Text fontSize="xs" opacity={0.8}>Share of component</Text>
-                                            <Tooltip.Root openDelay={200}>
-                                              <Tooltip.Trigger>
-                                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                              </Tooltip.Trigger>
-                                              <Tooltip.Positioner>
-                                                <Tooltip.Content>
-                                                  <Tooltip.Arrow />
-                                                  <Text fontSize="xs">Percentage of nodes in this component that contain this protein.</Text>
-                                                </Tooltip.Content>
-                                              </Tooltip.Positioner>
-                                            </Tooltip.Root>
-                                          </HStack>
-                                          <HStack gap={1} title="Share of nodes in component" opacity={0.9}>
-                                            <FiPercent />
-                                            <Text>{typeof ratio === 'number' ? `${Math.round(ratio * 100)}%` : '-'}</Text>
-                                          </HStack>
-                                        </Stack>
-
-                                        <Stack gap={0} minW="120px">
-                                          <HStack gap={2} align="center">
-                                            <Text fontSize="xs" opacity={0.8}>Count in component</Text>
-                                            <Tooltip.Root openDelay={200}>
-                                              <Tooltip.Trigger>
-                                                <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                              </Tooltip.Trigger>
-                                              <Tooltip.Positioner>
-                                                <Tooltip.Content>
-                                                  <Tooltip.Arrow />
-                                                  <Text fontSize="xs">Number of distinct nodes in this component that include this protein in their label.</Text>
-                                                </Tooltip.Content>
-                                              </Tooltip.Positioner>
-                                            </Tooltip.Root>
-                                          </HStack>
-                                          <Badge title="Total occurrences in component" variant="subtle" w="fit-content">{count}</Badge>
-                                        </Stack>
-                                      </HStack>
-
-                                      {/* Type distribution */}
-                                      <Stack gap={1} mb={2}>
-                                        <HStack gap={2} align="center">
-                                          <Text fontSize="xs" opacity={0.8}>Type distribution</Text>
-                                          <Tooltip.Root openDelay={200}>
-                                            <Tooltip.Trigger>
-                                              <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                            </Tooltip.Trigger>
-                                            <Tooltip.Positioner>
-                                              <Tooltip.Content>
-                                                <Tooltip.Arrow />
-                                                <Text fontSize="xs">Breakdown of this protein across node types in the component.</Text>
-                                              </Tooltip.Content>
-                                            </Tooltip.Positioner>
-                                          </Tooltip.Root>
-                                        </HStack>
-                                        <Box bg="blackAlpha.200" _dark={{ bg: 'whiteAlpha.200' }} h="8px" rounded="sm" position="relative">
-                                          <HStack gap={0} w={`${typeof ratio === 'number' ? Math.max(4, Math.round(ratio * 100)) : totalPct}%`} h="100%">
-                                            {parts.length === 0 ? (
-                                              <Box bg="#4A90E2" h="100%" w="100%" rounded="sm" />
-                                            ) : (
-                                              parts.map(([t, c], idx) => {
-                                                const frac = c / sum
-                                                const w = `${Math.max(2, Math.round(frac * 100))}%`
-                                                const color = nodeTypeColors[t] || nodeTypeColors.unknown
-                                                const leftRadius = idx === 0 ? 6 : 0
-                                                const rightRadius = idx === parts.length - 1 ? 6 : 0
-                                                return (
-                                                  <Box key={`${protein}-${t}`} bg={color} h="100%" w={w} borderTopLeftRadius={leftRadius} borderBottomLeftRadius={leftRadius} borderTopRightRadius={rightRadius} borderBottomRightRadius={rightRadius} />
-                                                )
-                                              })
-                                            )}
-                                          </HStack>
-                                        </Box>
-                                        {parts.length > 0 && (
-                                          <HStack gap={2} wrap="wrap">
-                                            {parts.map(([t, c]) => (
-                                              <Badge key={`${protein}-legend-${t}`} colorScheme="gray" variant="outline" title="Per-type counts and ratio within this protein">
-                                                {t}: {c}{typeof type_ratios?.[t] === 'number' ? ` (${Math.round(type_ratios[t] * 100)}%)` : ''}
-                                              </Badge>
-                                            ))}
-                                          </HStack>
-                                        )}
-                                      </Stack>
-
-                                      {/* Other components */}
-                                      <Stack gap={1}>
-                                        <HStack gap={2} align="center">
-                                          <Text fontSize="xs" opacity={0.8}>Other components</Text>
-                                          <Tooltip.Root openDelay={200}>
-                                            <Tooltip.Trigger>
-                                              <Text as="span" fontSize="xs" opacity={0.6} cursor="help">?</Text>
-                                            </Tooltip.Trigger>
-                                            <Tooltip.Positioner>
-                                              <Tooltip.Content>
-                                                <Tooltip.Arrow />
-                                                <Text fontSize="xs">Components in the current graph where this protein also appears. Hover to preview, click to navigate.</Text>
-                                              </Tooltip.Content>
-                                            </Tooltip.Positioner>
-                                          </Tooltip.Root>
-                                        </HStack>
-                                        {typeof other_components === 'number' && other_components > 0 ? (
-                                          compMenu.length > 0 ? (
-                                            <HStack gap={1} wrap="wrap">
-                                              {compMenu.map((it) => (
-                                                <Button
-                                                  key={`${protein}-comp-${it.cid}`}
-                                                  size="2xs"
-                                                  variant="outline"
-                                                  title={`Component #${it.cid}`}
-                                                  onMouseEnter={() => previewComponent(it.cid)}
-                                                  onMouseLeave={() => clearHoverPreview(it.cid)}
-                                                  onClick={() => {
-                                                    if (hoverRevertTimeoutRef.current) {
-                                                      window.clearTimeout(hoverRevertTimeoutRef.current)
-                                                      hoverRevertTimeoutRef.current = null
-                                                    }
-                                                    prevViewRef.current = null
-                                                    hoveredComponentRef.current = null
-                                                    highlightComponent(it.cid)
-                                                    setIsDrawerOpen(false)
-                                                  }}
-                                                >
-                                                  #{it.cid}
-                                                </Button>
-                                              ))}
-                                            </HStack>
-                                          ) : (
-                                            <Badge variant="outline">not found in current view</Badge>
-                                          )
-                                        ) : (
-                                          <Badge variant="outline">in {other_components ?? 0} comps</Badge>
-                                        )}
-                                      </Stack>
-                                    </>
-                                  )}
-                                </Box>
-                              )
-                            })}
-                          </Stack>
-                      )
-                    ) : null
-                  )}
-                  {!selectedNodeInfo && (
-                    <HStack justify="flex-end" mt={1}>
-                      <Button
-                        size="xs"
-                        variant="outline"
-                        onClick={() => {
-                          setIsDistributionOpen((v) => !v)
-                          const id = selectedNode?.id
-                          if (id && !selectedNodeInfo && !nodeInfoLoading) fetchNodeComponentInfo(id)
-                        }}
-                      >
-                        {isDistributionOpen ? "Hide" : "Show"}
-                      </Button>
-                    </HStack>
-                  )}
-                </Box>
-
-                {/* Highlight options now toggled via settings icon in the Protein distribution header */}
-              </Stack>
-            ) : (
-              <Text>No node selected</Text>
-            )}
-          </DrawerBody>
-        </DrawerContent>
-      </DrawerRoot>
+      <CytoscapeSidebar
+        isDrawerOpen={isDrawerOpen}
+        setIsDrawerOpen={(open) => setIsDrawerOpen(open)}
+        selectedNode={selectedNode}
+        nodeInfoLoading={nodeInfoLoading}
+        selectedNodeInfo={selectedNodeInfo}
+        networkName={networkName}
+        filename={filename}
+        fixedComponentId={fixedComponentId}
+        effectiveComponentId={effectiveComponentId}
+        savingFavorite={savingFavorite}
+        savedFavoriteOnce={savedFavoriteOnce}
+        setSavingFavorite={setSavingFavorite}
+        setSavedFavoriteOnce={setSavedFavoriteOnce}
+        fetchNodeComponentInfo={fetchNodeComponentInfo}
+        isIdOpen={isIdOpen}
+        setIsIdOpen={setIsIdOpen}
+        isComponentOpen={isComponentOpen}
+        setIsComponentOpen={setIsComponentOpen}
+        isDistributionOpen={isDistributionOpen}
+        setIsDistributionOpen={setIsDistributionOpen}
+        isNodeProteinOpen={isNodeProteinOpen}
+        setIsNodeProteinOpen={setIsNodeProteinOpen}
+        isNodeHighlightOptionsOpen={isNodeHighlightOptionsOpen}
+        setIsNodeHighlightOptionsOpen={setIsNodeHighlightOptionsOpen}
+        isHighlightOptionsOpen={isHighlightOptionsOpen}
+        setIsHighlightOptionsOpen={setIsHighlightOptionsOpen}
+        proteinCountsSorted={proteinCountsSorted as any}
+        proteinMaxCount={proteinMaxCount}
+        nodeLabelProteins={nodeLabelProteins}
+        computeComponents={computeComponents as any}
+        previewComponent={previewComponent}
+        clearHoverPreview={clearHoverPreview}
+        highlightComponent={highlightComponent}
+        highlightProteins={highlightProteins}
+        setHighlightProteins={(next) => setHighlightProteins(new Set(next))}
+        expandedProteins={expandedProteins}
+        setExpandedProteins={(next) => setExpandedProteins(new Set(next))}
+        selectedBorderWidth={selectedBorderWidth}
+        cyRef={cyRef as any}
+        hoverRevertTimeoutRef={hoverRevertTimeoutRef as any}
+        prevViewRef={prevViewRef as any}
+      />
     </Box>
   )
 }

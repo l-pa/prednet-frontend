@@ -19,7 +19,7 @@ import { useEffect, useState } from "react"
 import { FiEye, FiTrash2 } from "react-icons/fi"
 import { z } from "zod"
 
-import CytoscapeNetwork from "@/components/Networks/CytoscapeNetwork"
+import SigmaNetwork from "@/components/Networks/SigmaNetwork"
 import ProteinDistributionList from "@/components/Networks/ProteinDistributionList"
 import { OpenAPI } from "@/client"
 import {
@@ -265,15 +265,9 @@ function FavoritesTable() {
           <Card.Body>
             <Grid templateColumns={{ base: '1fr', xl: '2fr 1fr' }} gap={4} alignItems="stretch">
               <Box minH="520px">
-                <CytoscapeNetwork
+                <SigmaNetwork
                   data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
                   height="520px"
-                  wheelSensitivity={2.5}
-                  minZoom={0.1}
-                  maxZoom={3}
-                  disableComponentTapHighlight
-                  networkName={subgraphNetworkName || undefined}
-                  filename={subgraphFilename || undefined}
                 />
               </Box>
               <Box borderWidth="1px" borderRadius="md" p={3} bg="white" _dark={{ bg: 'blackAlpha.600' }}>

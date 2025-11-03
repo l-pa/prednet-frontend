@@ -21,6 +21,9 @@ import { FiDatabase, FiGlobe, FiEye, FiChevronUp, FiChevronDown } from "react-ic
 import useCustomToast from "@/hooks/useCustomToast"
 import { OpenAPI } from "@/client"
 import CytoscapeNetwork from "@/components/Networks/CytoscapeNetwork"
+import SigmaNetwork from "@/components/Networks/SigmaNetwork"
+import ReagraphNetwork from "@/components/Networks/ReagraphNetwork"
+import GraphinNetwork from "@/components/Networks/GraphinNetwork"
 import ProteinDistributionList, { type ProteinDistributionItem } from "@/components/Networks/ProteinDistributionList"
 
 interface NetworkInfo {
@@ -71,6 +74,14 @@ const ProteinsPage = () => {
   const [proteinTypesMap, setProteinTypesMap] = useState<Record<string, string[]>>({})
   const [infoProtein, setInfoProtein] = useState<string | null>(null)
   const { showErrorToast } = useCustomToast()
+  const [renderer, setRenderer] = useState<"cytoscape" | "sigma" | "reagraph" | "graphin">(() => {
+    try {
+      const stored = localStorage.getItem('network.renderer')
+      return (stored === 'sigma' || stored === 'cytoscape' || stored === 'reagraph' || stored === 'graphin') ? (stored as any) : 'cytoscape'
+    } catch {
+      return 'cytoscape'
+    }
+  })
 
   const fetchNetworks = async () => {
     setLoadingNetworks(true)
@@ -132,6 +143,25 @@ const ProteinsPage = () => {
 
   useEffect(() => {
     fetchNetworks()
+  }, [])
+
+  // React to changes from Settings dialog or other tabs
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      try {
+        if (!e.key || e.key === 'network.renderer') {
+          const r = localStorage.getItem('network.renderer') as any
+          setRenderer((r === 'sigma' || r === 'cytoscape' || r === 'reagraph' || r === 'graphin') ? r : 'cytoscape')
+        }
+      } catch {}
+    }
+    const onCustom = () => onStorage(new StorageEvent('storage', { key: 'network.renderer' }))
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('network-renderer-changed', onCustom as any)
+    return () => {
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('network-renderer-changed', onCustom as any)
+    }
   }, [])
 
   const onSelectNetwork = (networkName: string) => {
@@ -754,16 +784,37 @@ const ProteinsPage = () => {
             <Card.Body>
               <Grid templateColumns={{ base: "1fr", xl: "2fr 1fr" }} gap={4} alignItems="stretch">
                 <Box minH="500px">
-                  <CytoscapeNetwork
-                    data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
-                    height="500px"
-                    wheelSensitivity={2.5}
-                    minZoom={0.1}
-                    maxZoom={3}
-                    disableComponentTapHighlight
-                    networkName={subgraphNetworkName || undefined}
-                    filename={subgraphFilename || undefined}
-                  />
+                  {renderer === 'cytoscape' ? (
+                    <CytoscapeNetwork
+                      data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
+                      height="500px"
+                      wheelSensitivity={2.5}
+                      minZoom={0.1}
+                      maxZoom={3}
+                      autoRunLayout={false}
+                      networkName={subgraphNetworkName || undefined}
+                      filename={subgraphFilename || undefined}
+                    />
+                  ) : renderer === 'sigma' ? (
+                    <SigmaNetwork
+                      data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
+                      height="500px"
+                    />
+                  ) : renderer === 'reagraph' ? (
+                    <ReagraphNetwork
+                      data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
+                      height="500px"
+                      networkName={subgraphNetworkName || undefined}
+                      filename={subgraphFilename || undefined}
+                    />
+                  ) : (
+                    <GraphinNetwork
+                      data={{ nodes: subgraph.nodes, edges: subgraph.edges }}
+                      height="500px"
+                      networkName={subgraphNetworkName || undefined}
+                      filename={subgraphFilename || undefined}
+                    />
+                  )}
                 </Box>
                 <Box borderWidth="1px" borderRadius="md" p={3} bg="white" _dark={{ bg: "blackAlpha.600" }}>
                   <Stack gap={3} fontSize="sm">
