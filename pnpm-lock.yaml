@@ -38,6 +38,9 @@ importers:
       cytoscape-cose-bilkent:
         specifier: ^4.1.0
         version: 4.1.0(cytoscape@3.33.1)
+      cytoscape-elk:
+        specifier: ^2.3.0
+        version: 2.3.0(cytoscape@3.33.1)
       cytoscape-fcose:
         specifier: ^2.2.0
         version: 2.2.0(cytoscape@3.33.1)
@@ -1666,6 +1669,11 @@ packages:
     peerDependencies:
       cytoscape: ^3.2.0
 
+  cytoscape-elk@2.3.0:
+    resolution: {integrity: sha512-1h2ZmPOy5HD2+mrfF3P2ICxfnDyPCWg/xLVs7fIjTOzdQu51ydrMtm6Sb7KnhFwLBzhGIVYI2Gbns0njggBarQ==}
+    peerDependencies:
+      cytoscape: ^3.2.0
+
   cytoscape-fcose@2.2.0:
     resolution: {integrity: sha512-ki1/VuRIHFCzxWNrsshHYPs6L7TvLu3DL+TyIGEsRcvVERmxokbf5Gdk7mFxZnTdiGtnA4cfSmjZJMviqSuZrQ==}
     peerDependencies:
@@ -1832,6 +1840,9 @@ packages:
 
   electron-to-chromium@1.5.234:
     resolution: {integrity: sha512-RXfEp2x+VRYn8jbKfQlRImzoJU01kyDvVPBmG39eU2iuRVhuS6vQNocB8J0/8GrIMLnPzgz4eW6WiRnJkTuNWg==}
+
+  elkjs@0.9.3:
+    resolution: {integrity: sha512-f/ZeWvW/BCXbhGEf1Ujp29EASo/lk1FDnETgNKwJrsVvGZhUWCZyg3xLJjAsxfOmt8KjswHmI5EwCQcPMpOYhQ==}
 
   ellipsize@0.6.2:
     resolution: {integrity: sha512-zB4m5iEETalVrrP8RzcF0Qzqyw3MkUQ4R43NiczRAp0Hpp0+0bRdwKnoaFXyJoVJCipm2/3xc7Hkg0OOAorUPw==}
@@ -4973,6 +4984,11 @@ snapshots:
       cose-base: 1.0.3
       cytoscape: 3.33.1
 
+  cytoscape-elk@2.3.0(cytoscape@3.33.1):
+    dependencies:
+      cytoscape: 3.33.1
+      elkjs: 0.9.3
+
   cytoscape-fcose@2.2.0(cytoscape@3.33.1):
     dependencies:
       cose-base: 2.2.0
@@ -5114,6 +5130,8 @@ snapshots:
       gopd: 1.2.0
 
   electron-to-chromium@1.5.234: {}
+
+  elkjs@0.9.3: {}
 
   ellipsize@0.6.2: {}
 
