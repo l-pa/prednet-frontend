@@ -1,9 +1,11 @@
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { Box, Button, HStack, Stack, Text, Tooltip, Badge, Spinner } from "@chakra-ui/react"
-import { FiPlay, FiRefreshCw, FiHash, FiPercent, FiSettings, FiTarget } from "react-icons/fi"
+import { Box, Button, HStack, Stack, Text } from "@chakra-ui/react"
+import { FiPlay, FiRefreshCw, FiHash, FiSettings, FiTarget } from "react-icons/fi"
 import { OpenAPI } from "@/client"
 // Reagraph entrypoint
 import { GraphCanvas } from "reagraph"
+import NetworkSidebar from "@/components/Networks/Shared/NetworkSidebar"
+import { NetworkSidebarProvider } from "@/components/Networks/Shared/NetworkSidebarContext"
 
 // Keep the same external types/props shape as Cytoscape renderer for drop-in use
 type CytoscapeNode = { data: Record<string, any> }
@@ -392,8 +394,95 @@ const ReagraphNetwork = ({
   // Reagraph internal key to trigger refit
   const [regraphKey, setRegraphKey] = useState(0)
 
+  // Component helper functions (stubs for Reagraph - no component highlighting support yet)
+  const computeComponents = useCallback(() => {
+    return { nidToCid: new Map<string, number>(), cidToNodeIds: new Map<number, string[]>() }
+  }, [])
+
+  const previewComponent = useCallback((_cid: number) => {
+    // Not implemented for Reagraph
+  }, [])
+
+  const clearHoverPreview = useCallback(() => {
+    // Not implemented for Reagraph
+  }, [])
+
+  const highlightComponent = useCallback((_cid: number) => {
+    // Not implemented for Reagraph
+  }, [])
+
+  // Memoized calculations for sidebar
+  const proteinCountsSorted = useMemo(() => {
+    return (selectedNodeInfo?.proteinCounts || []).slice()
+  }, [selectedNodeInfo])
+
+  const proteinMaxCount = useMemo(() => {
+    const arr = selectedNodeInfo?.proteinCounts || []
+    if (arr.length === 0) return 1
+    return Math.max(1, ...arr.map((x: any) => x.count))
+  }, [selectedNodeInfo])
+
+  const tokenize = useCallback((s: string) => s.split(/\s+/).filter(Boolean), [])
+
+  const nodeLabelProteins = useMemo(() => {
+    const id = selectedNode?.id
+    const node = graphNodes.find((n: any) => n.id === id)
+    const label = String(node?.data?.label ?? node?.label ?? "")
+    const toks = tokenize(label)
+    const uniq = Array.from(new Set(toks))
+    uniq.sort((a, b) => a.localeCompare(b))
+    return uniq
+  }, [selectedNode?.id, graphNodes, tokenize])
+
+  const [isIdOpen, setIsIdOpen] = useState(false)
+  const [isComponentOpen, setIsComponentOpen] = useState(false)
+  const [isDistributionOpen, setIsDistributionOpen] = useState(false)
+  const [isNodeProteinOpen, setIsNodeProteinOpen] = useState(false)
+  const [highlightProteins, setHighlightProteins] = useState<Set<string>>(new Set())
+  const [expandedProteins, setExpandedProteins] = useState<Set<string>>(new Set())
+
   return (
-    <Box position="relative" height={height} ref={containerRef}>
+    <NetworkSidebarProvider
+      value={{
+        isDrawerOpen,
+        setIsDrawerOpen,
+        selectedNode,
+        nodeInfoLoading,
+        selectedNodeInfo,
+        networkName,
+        filename,
+        fixedComponentId,
+        effectiveComponentId,
+        savingFavorite,
+        savedFavoriteOnce,
+        setSavingFavorite,
+        setSavedFavoriteOnce,
+        fetchNodeComponentInfo,
+        isIdOpen,
+        setIsIdOpen,
+        isComponentOpen,
+        setIsComponentOpen,
+        isDistributionOpen,
+        setIsDistributionOpen,
+        isNodeProteinOpen,
+        setIsNodeProteinOpen,
+        proteinCountsSorted,
+        proteinMaxCount,
+        nodeLabelProteins,
+        computeComponents: computeComponents as any,
+        previewComponent,
+        clearHoverPreview,
+        highlightComponent,
+        highlightProteins,
+        setHighlightProteins,
+        expandedProteins,
+        setExpandedProteins,
+        graphRef: containerRef,
+        hoverRevertTimeoutRef: useRef(null),
+        prevViewRef: useRef(null),
+      }}
+    >
+      <Box position="relative" height={height} ref={containerRef}>
       {/* Controls */}
       {showControls && (
         <Box
@@ -581,72 +670,7 @@ const ReagraphNetwork = ({
         </Box>
       )}
 
-      {/* Drawer-like simple panel for node info */}
-      {isDrawerOpen && (
-        <Box
-          position="absolute"
-          right={2}
-          bottom={2}
-          zIndex={2}
-          bg="whiteAlpha.900"
-          _dark={{ bg: "blackAlpha.700" }}
-          px={3}
-          py={3}
-          rounded="md"
-          boxShadow="lg"
-          minW="320px"
-          maxW="420px"
-          maxH="60%"
-          overflowY="auto"
-        >
-          <Stack gap={3}>
-            <HStack justify="space-between" align="center">
-              <Text fontWeight="semibold">Node</Text>
-              <Button size="xs" variant="ghost" onClick={() => setIsDrawerOpen(false)}>Close</Button>
-            </HStack>
-            <HStack gap={2}>
-              <Badge colorPalette="teal">ID</Badge>
-              <Text fontSize="sm">{selectedNode?.id}</Text>
-            </HStack>
-            {selectedNode?.label && (
-              <HStack gap={2}>
-                <Badge colorPalette="purple">Label</Badge>
-                <Text fontSize="sm">{selectedNode.label}</Text>
-              </HStack>
-            )}
 
-            <HStack gap={2}>
-              <Badge colorPalette="blue">Component</Badge>
-              {nodeInfoLoading ? (
-                <Spinner size="xs" />
-              ) : selectedNodeInfo?.componentId ? (
-                <HStack gap={2}>
-                  <Text fontSize="sm">#{selectedNodeInfo.componentId}</Text>
-                  {typeof selectedNodeInfo.componentSize === 'number' && (
-                    <Badge colorPalette="gray">{selectedNodeInfo.componentSize} nodes</Badge>
-                  )}
-                </HStack>
-              ) : (
-                <Text fontSize="sm" opacity={0.8}>No data</Text>
-              )}
-            </HStack>
-
-            {selectedNodeInfo?.proteinCounts && selectedNodeInfo.proteinCounts.length > 0 && (
-              <Box>
-                <Text fontSize="xs" opacity={0.8} mb={1}>Protein counts (component)</Text>
-                <Stack gap={1}>
-                  {selectedNodeInfo.proteinCounts.map((p) => (
-                    <HStack key={p.protein} justify="space-between">
-                      <Text fontSize="xs">{p.protein}</Text>
-                      <Badge>{p.count}</Badge>
-                    </HStack>
-                  ))}
-                </Stack>
-              </Box>
-            )}
-          </Stack>
-        </Box>
-      )}
 
       {/* Graph Canvas */}
       <GraphCanvas
@@ -659,7 +683,10 @@ const ReagraphNetwork = ({
         onCanvasClick={() => onCanvasClick()}
         // style={{ width: "100%", height: "100%" }}
       />
+
+      <NetworkSidebar />
     </Box>
+    </NetworkSidebarProvider>
   )
 }
 

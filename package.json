@@ -21,6 +21,7 @@
     "axios": "1.12.2",
     "cytoscape": "^3.33.1",
     "cytoscape-cose-bilkent": "^4.1.0",
+    "cytoscape-elk": "^2.3.0",
     "cytoscape-fcose": "^2.2.0",
     "form-data": "4.0.4",
     "graphology": "^0.26.0",

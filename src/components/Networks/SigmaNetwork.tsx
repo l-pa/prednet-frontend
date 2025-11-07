@@ -7,18 +7,10 @@ import {
   Text,
   Badge,
   Spinner,
-  Drawer,
-  DrawerBody,
-  DrawerHeader,
-  DrawerContent,
   PopoverTrigger,
   PopoverContent,
   PopoverArrow,
   PopoverBody,
-  CloseButton,
-  DrawerCloseTrigger,
-  DrawerRoot,
-  DrawerTitle,
   PopoverRoot,
   Portal,
 } from "@chakra-ui/react"
@@ -26,6 +18,9 @@ import { FiPlay, FiRefreshCw, FiHash, FiPercent, FiSettings, FiTarget } from "re
 import { OpenAPI } from "@/client"
 import Graph from "graphology"
 import Sigma from "sigma"
+import NetworkSidebar from "@/components/Networks/Shared/NetworkSidebar"
+import { NetworkSidebarProvider } from "@/components/Networks/Shared/NetworkSidebarContext"
+import { computeComponents, previewComponent as previewComponentUtil, clearHoverPreview as clearHoverPreviewUtil, highlightComponent as highlightComponentUtil } from "@/utils/graphologyUtils"
 
 // Define the types for the graph data
 type CytoscapeNode = { data: Record<string, any> }
@@ -79,7 +74,7 @@ const defaultStyleSettings = {
 const SigmaNetwork = ({
   data,
   height = "500px",
-  layoutName = "cose",
+  layoutName = "fcose",
   showControls = true,
   fitOnInit = false,
   networkName,
@@ -336,7 +331,8 @@ const SigmaNetwork = ({
           res.color = "#e2e8f0"
           res.label = ""
         } else {
-          res.color = nodeTypeColors[(data as any).node_type] || nodeTypeColors.unknown
+          const nodeType = String((data as any).node_type ?? "unknown")
+          res.color = nodeTypeColors[nodeType as keyof typeof nodeTypeColors] || nodeTypeColors.unknown
         }
         if (!showLabelsRef.current) {
           (res as any).label = ""
@@ -569,26 +565,7 @@ useEffect(() => {
     return { nidToCid, components };
   }
 
-  const previewComponent = useCallback((cid: number) => {
-    const graph = graphRef.current; if (!graph) return; const { nidToCid } = computeComponents(graph);
-    graph.forEachNode((node) => graph.setNodeAttribute(node, "dimmed", nidToCid.get(node) !== cid));
-    graph.forEachEdge((edge, _attrs, source, target) => graph.setEdgeAttribute(edge, "hidden", nidToCid.get(source) !== cid || nidToCid.get(target) !== cid));
-  }, []);
 
-  const clearHoverPreview = useCallback((_cid?: number) => recomputeProteinHighlight(), [recomputeProteinHighlight]);
-
-  const highlightComponent = useCallback((cid: number) => {
-    const graph = graphRef.current, sigma = sigmaRef.current; if (!graph || !sigma) return;
-    const { nidToCid } = computeComponents(graph); const nodesInComp: string[] = [];
-    graph.forEachNode((node) => { const inComp = nidToCid.get(node) === cid; graph.setNodeAttribute(node, "highlighted", inComp).setNodeAttribute(node, "dimmed", !inComp); if (inComp) nodesInComp.push(node) });
-    graph.forEachEdge((edge, _attrs, source, target) => graph.setEdgeAttribute(edge, "hidden", nidToCid.get(source) !== cid || nidToCid.get(target) !== cid));
-    if (nodesInComp.length > 0) {
-      const coords = nodesInComp.map(n => ({ x: graph.getNodeAttribute(n, "x") as number, y: graph.getNodeAttribute(n, "y") as number }));
-      const xs = coords.map(c => c.x), ys = coords.map(c => c.y);
-      const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-      sigma.getCamera().animate({ x: (minX + maxX) / 2, y: (minY + maxY) / 2, ratio: Math.max(1, maxX - minX, maxY - minY) * 1.2 }, { duration: 400 });
-    }
-  }, []);
 
   // UI Action Handlers
   const stopLayout = useCallback(() => layoutWorkerRef.current?.postMessage({ type: 'stop' }), []);
@@ -651,9 +628,70 @@ useEffect(() => {
 
   const handleResetView = useCallback(() => sigmaRef.current?.getCamera().animatedReset({ duration: 300 }), []);
 
+  // Component operations for sidebar
+  const previewComponent = useCallback((cid: number) => {
+    const graph = graphRef.current
+    if (!graph) return
+    previewComponentUtil(graph, cid)
+  }, [])
+
+  const clearHoverPreview = useCallback(() => {
+    const graph = graphRef.current
+    if (!graph) return
+    clearHoverPreviewUtil(graph)
+    recomputeProteinHighlight()
+  }, [recomputeProteinHighlight])
+
+  const highlightComponent = useCallback((cid: number) => {
+    const graph = graphRef.current
+    const sigma = sigmaRef.current
+    if (!graph || !sigma) return
+    highlightComponentUtil(graph, sigma, cid)
+  }, [])
+
   // Render method
   return (
-    <Box position="relative" width="100%" height={typeof height === "number" ? `${height}px` : height}>
+    <NetworkSidebarProvider
+      value={{
+        isDrawerOpen,
+        setIsDrawerOpen,
+        selectedNode,
+        nodeInfoLoading,
+        selectedNodeInfo,
+        networkName,
+        filename,
+        fixedComponentId,
+        effectiveComponentId,
+        savingFavorite,
+        savedFavoriteOnce,
+        setSavingFavorite,
+        setSavedFavoriteOnce,
+        fetchNodeComponentInfo,
+        isIdOpen,
+        setIsIdOpen,
+        isComponentOpen,
+        setIsComponentOpen,
+        isDistributionOpen,
+        setIsDistributionOpen,
+        isNodeProteinOpen,
+        setIsNodeProteinOpen,
+        proteinCountsSorted,
+        proteinMaxCount,
+        nodeLabelProteins,
+        computeComponents: computeComponents as any,
+        previewComponent,
+        clearHoverPreview,
+        highlightComponent,
+        highlightProteins,
+        setHighlightProteins,
+        expandedProteins,
+        setExpandedProteins,
+        graphRef,
+        hoverRevertTimeoutRef: useRef(null),
+        prevViewRef: useRef(null),
+      }}
+    >
+      <Box position="relative" width="100%" height={typeof height === "number" ? `${height}px` : height}>
       {showControls && (
         <Stack gap={2} position="absolute" top={2} right={2} zIndex={10} bg="whiteAlpha.800" _dark={{ bg: "blackAlpha.600" }} px={2} py={2} rounded="md" boxShadow="md" align="stretch" width="260px" >
           <Box>
@@ -777,118 +815,9 @@ useEffect(() => {
         </Box>
       )}
 
-      <Portal>
-        <DrawerRoot open={isDrawerOpen} onOpenChange={(e) => setIsDrawerOpen(e.open)} placement="end" modal={false} closeOnInteractOutside={false} trapFocus={false}>
-          <DrawerContent maxW="sm" zIndex={1400} position="fixed" right={0} top={0} bottom={0} h="100vh">
-            <DrawerHeader><DrawerTitle>Node details</DrawerTitle><DrawerCloseTrigger asChild><CloseButton /></DrawerCloseTrigger></DrawerHeader>
-            <DrawerBody>
-              {selectedNode ? (
-                <Stack gap={3} fontSize="sm">
-                  <Box>
-                    <HStack justify="space-between"><Text fontWeight="bold">ID</Text><Button size="xs" variant="ghost" onClick={() => setIsIdOpen((v) => !v)}>{isIdOpen ? "Hide" : "Show"}</Button></HStack>
-                    {isIdOpen && (<Text fontFamily="monospace">{selectedNode.id}</Text>)}
-                  </Box>
-                  {nodeInfoLoading ? <Spinner size="sm" /> : (selectedNodeInfo) ? (
-                    <Box>
-                      <HStack justify="space-between"><Text fontWeight="bold">Component</Text>
-                        <HStack gap={2}>
-                          {(networkName && filename) && (
-                            <Button size="xs" variant={savedFavoriteOnce ? 'solid' : 'outline'} disabled={savedFavoriteOnce || typeof effectiveComponentId !== 'number' || savingFavorite} isLoading={savingFavorite}
-                              onClick={async () => {
-                                if (savedFavoriteOnce || !networkName || !filename) return;
-                                const cid = effectiveComponentId; if (typeof cid !== 'number') return;
-                                try {
-                                  setSavingFavorite(true);
-                                  const baseUrl = OpenAPI.BASE || 'http://localhost';
-                                  const token = localStorage.getItem('access_token') || '';
-                                  const headers: Record<string, string> = { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) };
-                                  const body = { network_name: networkName, filename, component_id: cid, title: `Component ${cid}`, description: filename };
-                                  const resp = await fetch(`${baseUrl}/api/v1/favorites`, { method: 'POST', headers, body: JSON.stringify(body) });
-                                  if (!resp.ok) throw new Error('failed');
-                                  setSavedFavoriteOnce(true);
-                                } catch { } finally { setSavingFavorite(false) }
-                              }} title={savedFavoriteOnce ? 'Saved' : 'Save as favorite'} >
-                              {savedFavoriteOnce ? 'Saved' : 'Save'}
-                            </Button>
-                          )}
-                          <Button size="xs" variant="ghost" onClick={() => setIsComponentOpen((v) => !v)}>{isComponentOpen ? "Hide" : "Show"}</Button>
-                        </HStack>
-                      </HStack>
-                      {isComponentOpen && (<Text>{selectedNodeInfo.componentId !== undefined && `#${selectedNodeInfo.componentId}`}{selectedNodeInfo.componentId !== undefined && " · "}{selectedNodeInfo.componentSize !== undefined && `${selectedNodeInfo.componentSize} nodes`}</Text>)}
-                    </Box>
-                  ) : (<Box><HStack justify="space-between"><Text fontWeight="bold">Component</Text><Button size="xs" variant="ghost" onClick={() => { if (selectedNode?.id) fetchNodeComponentInfo(selectedNode.id) }}>Load</Button></HStack></Box>)}
-
-                  <Box>
-                    <HStack justify="space-between">
-                      <HStack gap={1} align="center"><Text fontWeight="bold">Node protein distribution</Text><Button size="xs" variant="ghost" onClick={() => setIsNodeHighlightOptionsOpen((v) => !v)} title="Highlight options"><FiSettings /></Button></HStack>
-                      <Button size="xs" variant="ghost" onClick={() => setIsNodeProteinOpen((v) => !v)}>{isNodeProteinOpen ? "Hide" : "Show"}</Button>
-                    </HStack>
-                    {isNodeHighlightOptionsOpen && (
-                      <Box><Stack gap={2} mt={2}>
-                        <HStack justify="space-between"><HStack align="center" gap={2}><Text fontSize="xs" opacity={0.8}>Match mode</Text></HStack><HStack gap={1}><Button size="xs" variant={styleSettings.highlightMode === 'AND' ? 'solid' : 'outline'} onClick={() => updateStyleSetting('highlightMode', 'AND')}>AND</Button><Button size="xs" variant={styleSettings.highlightMode === 'OR' ? 'solid' : 'outline'} onClick={() => updateStyleSetting('highlightMode', 'OR')}>OR</Button></HStack></HStack>
-                        <label style={{ display: 'flex', alignItems: 'center', gap: 6 }}><input type="checkbox" checked={styleSettings.filterComponentsByProteins} onChange={(e) => updateStyleSetting('filterComponentsByProteins', e.target.checked)} /><Text fontSize="sm">Show only components matching filter</Text></label>
-                        <HStack justify="flex-end"><Button size="xs" variant="outline" onClick={() => { setHighlightProteins(new Set()); setExpandedProteins(new Set()) }} disabled={highlightProteins.size === 0}>Clear highlights</Button></HStack>
-                      </Stack></Box>
-                    )}
-                    {isNodeProteinOpen && (
-                      <Box mt={2}>
-                        {nodeInfoLoading ? <HStack gap={2} align="center"><Spinner size="xs" /><Text fontSize="sm">Loading proteins…</Text></HStack> : selectedNodeInfo ? (
-                          (() => {
-                            const filtered = proteinCountsSorted.filter(({ protein }: any) => nodeLabelProteins.includes(protein));
-                            if (filtered.length === 0) return <Text opacity={0.7}>(no proteins in label)</Text>
-                            return (<Stack gap={3} overflowY="auto">
-                              {filtered.map(({ protein, count, type_counts, type_ratios, ratio, other_components }: any) => {
-                                const parts = Object.entries(type_counts || {}).sort((a: any, b: any) => (b[1] - a[1]) || String(a[0]).localeCompare(String(b[0])));
-                                const sum = parts.reduce((acc: number, [, c]: any) => acc + c, 0) || 1;
-                                const compMenu = useMemo(() => {
-                                  if (!graphRef.current) return [];
-                                  const { nidToCid } = computeComponents(graphRef.current);
-                                  const currentCid = selectedNode?.id ? nidToCid.get(String(selectedNode.id)) : undefined;
-                                  const compSet = new Set<number>();
-                                  graphRef.current.forEachNode((node, attrs) => {
-                                    if (String(attrs.label ?? "").split(/\s+/).includes(protein)) {
-                                      const cid = nidToCid.get(node);
-                                      if (typeof cid === "number" && cid !== currentCid) compSet.add(cid);
-                                    }
-                                  });
-                                  return Array.from(compSet).sort((a, b) => a - b).map(cid => ({ label: `#${cid}`, cid }));
-                                }, [protein, selectedNode?.id, graphRef.current]);
-                                return (<Box key={`nlp-box-${protein}`} p={2} borderWidth="1px" rounded="md"><Stack gap={1} mb={2}>
-                                  <HStack gap={2} align="center" justify="space-between">
-                                    <HStack gap={2} align="center"><FiHash opacity={0.8} /><Text fontWeight="semibold">{protein}</Text></HStack>
-                                    <HStack gap={2} align="center">
-                                      <Badge variant="subtle" w="fit-content">{count}</Badge>
-                                      <Button size="2xs" variant={highlightProteins.has(protein) ? 'solid' : 'outline'} onClick={() => setHighlightProteins(p => { const n = new Set(p); if (n.has(protein)) n.delete(protein); else n.add(protein); return n; })} title="Toggle highlight"><FiTarget /></Button>
-                                      <Button size="2xs" variant="outline" onClick={() => setExpandedProteins(p => { const n = new Set(p); if (n.has(protein)) n.delete(protein); else n.add(protein); return n; })}>{expandedProteins.has(protein) ? 'Hide details' : 'Show details'}</Button>
-                                    </HStack>
-                                  </HStack>
-                                </Stack>
-                                  {expandedProteins.has(protein) && (<>
-                                    <HStack gap={6} mb={2} align="flex-end"><Stack gap={0} minW="120px"><HStack gap={1} opacity={0.9}><FiPercent /><Text fontSize="xs">{typeof ratio === 'number' ? `${Math.round(ratio * 100)}%` : '-'}</Text></HStack></Stack><Stack gap={0} minW="120px"><Badge variant="subtle" w="fit-content">{count}</Badge></Stack></HStack>
-                                    <Stack gap={1} mb={2}><HStack gap={2} align="center"><Text fontSize="xs" opacity={0.8}>Type distribution</Text></HStack>
-                                      <Box bg="blackAlpha.200" _dark={{ bg: 'whiteAlpha.200' }} h="8px" rounded="sm" position="relative"><HStack gap={0} w={`${typeof ratio === 'number' ? Math.max(4, Math.round(ratio * 100)) : Math.max(4, Math.round((count / proteinMaxCount) * 100))}%`} h="100%">{parts.length === 0 ? <Box bg="#4A90E2" h="100%" w="100%" rounded="sm" /> : parts.map(([t, c]: any, idx: number) => <Box key={`${protein}-${String(t)}`} bg={nodeTypeColors[String(t)] || nodeTypeColors.unknown} h="100%" w={`${Math.max(2, Math.round((c / sum) * 100))}%`} borderLeftRadius={idx === 0 ? 6 : 0} borderRightRadius={idx === parts.length - 1 ? 6 : 0} />)}</HStack></Box>
-                                      {parts.length > 0 && <HStack gap={2} wrap="wrap">{parts.map(([t, c]: any) => <Badge key={`${protein}-legend-${String(t)}`} colorScheme="gray" variant="outline">{String(t)}: {c}{typeof (type_ratios?.[t]) === 'number' ? ` (${Math.round(type_ratios[t] * 100)}%)` : ''}</Badge>)}</HStack>}
-                                    </Stack>
-                                    <Stack gap={1}><HStack gap={2} align="center"><Text fontSize="xs" opacity={0.8}>Other components</Text></HStack>
-                                      {typeof other_components === 'number' && other_components > 0 ? (compMenu.length > 0 ? <HStack gap={1} wrap="wrap">{compMenu.map((it) => <Button key={`${protein}-comp-${it.cid}`} size="2xs" variant="outline" title={`Component #${it.cid}`} onMouseEnter={() => previewComponent(it.cid)} onMouseLeave={() => clearHoverPreview(it.cid)} onClick={() => { highlightComponent(it.cid); setIsDrawerOpen(false); }}>{it.label}</Button>)}</HStack> : <Badge variant="outline">not in view</Badge>) : <Badge variant="outline">in {other_components ?? 0} comps</Badge>}
-                                    </Stack>
-                                  </>)}
-                                </Box>)
-                              })}
-                            </Stack>)
-                          })()
-                        ) : <Text opacity={0.7}>(no data)</Text>}
-                      </Box>
-                    )}
-                  </Box>
-                  {/* ... other sections ... */}
-                </Stack>
-              ) : <Text>No node selected</Text>}
-            </DrawerBody>
-          </DrawerContent>
-        </DrawerRoot>
-      </Portal>
-    </Box>
+        <NetworkSidebar />
+      </Box>
+    </NetworkSidebarProvider>
   )
 }
 

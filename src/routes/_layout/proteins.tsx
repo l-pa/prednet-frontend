@@ -25,6 +25,7 @@ import SigmaNetwork from "@/components/Networks/SigmaNetwork"
 import ReagraphNetwork from "@/components/Networks/ReagraphNetwork"
 import GraphinNetwork from "@/components/Networks/GraphinNetwork"
 import ProteinDistributionList, { type ProteinDistributionItem } from "@/components/Networks/ProteinDistributionList"
+import ProteinComparisonModal from "@/components/Networks/Cytoscape/ProteinComparisonModal"
 
 interface NetworkInfo {
   name: string
@@ -73,6 +74,7 @@ const ProteinsPage = () => {
   const [proteinFilesMap, setProteinFilesMap] = useState<Record<string, string[]>>({})
   const [proteinTypesMap, setProteinTypesMap] = useState<Record<string, string[]>>({})
   const [infoProtein, setInfoProtein] = useState<string | null>(null)
+  const [comparisonModalOpen, setComparisonModalOpen] = useState(false)
   const { showErrorToast } = useCustomToast()
   const [renderer, setRenderer] = useState<"cytoscape" | "sigma" | "reagraph" | "graphin">(() => {
     try {
@@ -626,9 +628,20 @@ const ProteinsPage = () => {
                         <Text fontSize="sm" opacity={0.8}>
                           Selected: {selectedProteins.size}
                         </Text>
-                        <Button size="sm" onClick={fetchComponents} disabled={selectedProteins.size === 0}>
-                          Get components
-                        </Button>
+                        <HStack gap={2}>
+                          <Button 
+                            size="sm" 
+                            onClick={() => setComparisonModalOpen(true)} 
+                            disabled={selectedProteins.size < 2}
+                            variant="solid"
+                            colorScheme="blue"
+                          >
+                            Compare Proteins
+                          </Button>
+                          <Button size="sm" onClick={fetchComponents} disabled={selectedProteins.size === 0} variant="outline">
+                            Get components
+                          </Button>
+                        </HStack>
                       </HStack>
                       <Flex justify="space-between" mt={4}>
                         <Button
@@ -838,6 +851,23 @@ const ProteinsPage = () => {
           </Card.Root>
         )}
       </Box>
+
+      {/* Protein Comparison Modal */}
+      {selectedNetwork && (
+        <ProteinComparisonModal
+          isOpen={comparisonModalOpen}
+          onClose={() => setComparisonModalOpen(false)}
+          selectedProteins={Array.from(selectedProteins)}
+          networkName={selectedNetwork}
+          onRemoveProtein={(protein) => {
+            setSelectedProteins((prev) => {
+              const next = new Set(prev)
+              next.delete(protein)
+              return next
+            })
+          }}
+        />
+      )}
     </Container>
   )
 }
