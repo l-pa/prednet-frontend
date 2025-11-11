@@ -366,10 +366,25 @@ export interface ProteinFeature {
   end: number
 }
 
+// GO Terms Types
+export interface GOTerm {
+  id: string
+  name: string
+  parents: string[]
+  evidence?: string
+}
+
+export interface GOTermsByDomain {
+  biological_process: GOTerm[]
+  cellular_component: GOTerm[]
+  molecular_function: GOTerm[]
+}
+
 export interface ProteinFeatureData {
   protein: string
   sequence_length: number | null
   features: ProteinFeature[]
+  go_terms?: GOTermsByDomain | null
   error: string | null
 }
 

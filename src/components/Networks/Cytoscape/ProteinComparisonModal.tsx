@@ -10,6 +10,9 @@ import {
 import { useProteinFeatures } from "@/hooks/useProteinFeatures"
 import ProteinFeatureVisualization from "./ProteinFeatureVisualization"
 import FeatureLegend from "./FeatureLegend"
+import GOTermsPanel from "./GOTermsPanel"
+import GOTermsPanelDebug from "./GOTermsPanelDebug"
+import { useState } from "react"
 
 interface ProteinComparisonModalProps {
   isOpen: boolean
@@ -26,6 +29,9 @@ export default function ProteinComparisonModal({
   networkName,
   onRemoveProtein,
 }: ProteinComparisonModalProps) {
+  // State for GO terms panel collapse
+  const [isGOTermsPanelCollapsed, setIsGOTermsPanelCollapsed] = useState(false)
+
   // Use the custom hook to fetch protein features
   const { data, isLoading, error, refetch } = useProteinFeatures({
     networkName,
@@ -144,7 +150,30 @@ export default function ProteinComparisonModal({
                   }
                 />
               )}
+
+              {/* Debug component - logs GO terms data to console */}
+              <GOTermsPanelDebug proteinData={proteinData} />
+              
+              {/* GO Terms Panel - integrated below sequence features */}
+              <GOTermsPanel
+                proteinData={proteinData}
+                isLoading={false}
+                error={null}
+                isCollapsed={isGOTermsPanelCollapsed}
+                onToggleCollapse={() => setIsGOTermsPanelCollapsed(!isGOTermsPanelCollapsed)}
+              />
             </Box>
+          )}
+
+          {/* Loading state - also show GO Terms panel skeleton */}
+          {loading && (
+            <GOTermsPanel
+              proteinData={null}
+              isLoading={true}
+              error={null}
+              isCollapsed={isGOTermsPanelCollapsed}
+              onToggleCollapse={() => setIsGOTermsPanelCollapsed(!isGOTermsPanelCollapsed)}
+            />
           )}
 
           {/* Complete failure state (all proteins failed) */}
