@@ -1077,9 +1077,17 @@ const CytoscapeNetwork = ({
           clearHoverPreview,
           highlightComponent,
           highlightProteins: networkState.highlightProteins,
-          setHighlightProteins: (next) => networkActions.setHighlightProteins(new Set(next)),
+          setHighlightProteins: (next) => {
+            console.log('Context setHighlightProteins called with:', Array.from(next))
+            networkActions.setHighlightProteins(new Set(next))
+            console.log('Called networkActions.setHighlightProteins')
+          },
           expandedProteins: networkState.expandedProteins,
           setExpandedProteins: (next) => networkActions.setExpandedProteins(new Set(next)),
+          highlightMode: styleState.highlightMode,
+          setHighlightMode: styleActions.setHighlightMode,
+          filterComponentsByProteins: styleState.filterComponentsByProteins,
+          setFilterComponentsByProteins: styleActions.setFilterComponentsByProteins,
           selectedForComparison: networkState.selectedForComparison,
           setSelectedForComparison: (next) => networkActions.setSelectedForComparison(new Set(next)),
           comparisonModalOpen: networkState.comparisonModalOpen,

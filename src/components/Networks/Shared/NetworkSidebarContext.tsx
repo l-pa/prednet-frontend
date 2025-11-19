@@ -50,6 +50,10 @@ export interface NetworkSidebarState {
   setHighlightProteins: (next: Set<string>) => void
   expandedProteins: Set<string>
   setExpandedProteins: (next: Set<string>) => void
+  highlightMode: 'AND' | 'OR'
+  setHighlightMode: (mode: 'AND' | 'OR') => void
+  filterComponentsByProteins: boolean
+  setFilterComponentsByProteins: (filter: boolean) => void
   
   // Comparison state
   selectedForComparison: Set<string>

@@ -1,6 +1,7 @@
 import { Box, Button, HStack, Stack, Text, Badge, Spinner } from "@chakra-ui/react"
 import { DrawerBody, DrawerCloseTrigger, DrawerContent, DrawerHeader, DrawerRoot, DrawerTitle } from "@/components/ui/drawer"
-import { FiHash, FiPercent, FiSettings, FiTarget } from "react-icons/fi"
+import { MenuContent, MenuItem, MenuRoot, MenuTrigger } from "@/components/ui/menu"
+import { FiHash, FiPercent, FiSettings, FiTarget, FiCheck } from "react-icons/fi"
 import { OpenAPI } from "@/client"
 import { useNetworkSidebar } from '@/components/Networks/Shared/NetworkSidebarContext'
 import type { ProteinCount } from '@/components/Networks/Shared/types'
@@ -21,6 +22,7 @@ export default function NetworkSidebar() {
     proteinCountsSorted, proteinMaxCount, nodeLabelProteins,
     computeComponents, previewComponent, clearHoverPreview, highlightComponent,
     highlightProteins, setHighlightProteins, expandedProteins, setExpandedProteins,
+    highlightMode, setHighlightMode, filterComponentsByProteins, setFilterComponentsByProteins,
     selectedForComparison, setSelectedForComparison, comparisonModalOpen, setComparisonModalOpen,
     dataSource,
     graphRef, hoverRevertTimeoutRef, prevViewRef,
@@ -141,9 +143,18 @@ export default function NetworkSidebar() {
                 size="2xs"
                 variant={highlightProteins.has(protein) ? 'solid' : 'outline'}
                 onClick={() => {
+                  console.log('Highlight button clicked for protein:', protein)
+                  console.log('Current highlightProteins:', Array.from(highlightProteins))
                   const next = new Set(highlightProteins)
-                  if (next.has(protein)) next.delete(protein); else next.add(protein)
+                  if (next.has(protein)) {
+                    next.delete(protein)
+                    console.log('Removed protein, new set:', Array.from(next))
+                  } else {
+                    next.add(protein)
+                    console.log('Added protein, new set:', Array.from(next))
+                  }
                   setHighlightProteins(next)
+                  console.log('Called setHighlightProteins with:', Array.from(next))
                 }}
                 title="Toggle highlight"
               >
@@ -420,9 +431,51 @@ export default function NetworkSidebar() {
                 <HStack justify="space-between">
                   <HStack gap={1} align="center">
                     <Text fontWeight="bold">Node protein distribution</Text>
-                    <Button size="xs" variant="ghost" title="Highlight options">
-                      <FiSettings />
-                    </Button>
+                    <MenuRoot>
+                      <MenuTrigger asChild>
+                        <Button size="xs" variant="ghost" title="Highlight options">
+                          <FiSettings />
+                        </Button>
+                      </MenuTrigger>
+                      <MenuContent zIndex={9999}>
+                        <MenuItem
+                          value="mode-and"
+                          onClick={() => setHighlightMode('AND')}
+                        >
+                          <HStack gap={2} width="full">
+                            {highlightMode === 'AND' && <FiCheck />}
+                            <Stack gap={0} flex={1}>
+                              <Text fontWeight="medium">Match ALL proteins (AND)</Text>
+                              <Text fontSize="xs" opacity={0.7}>Node must contain all selected proteins</Text>
+                            </Stack>
+                          </HStack>
+                        </MenuItem>
+                        <MenuItem
+                          value="mode-or"
+                          onClick={() => setHighlightMode('OR')}
+                        >
+                          <HStack gap={2} width="full">
+                            {highlightMode === 'OR' && <FiCheck />}
+                            <Stack gap={0} flex={1}>
+                              <Text fontWeight="medium">Match ANY protein (OR)</Text>
+                              <Text fontSize="xs" opacity={0.7}>Node must contain at least one selected protein</Text>
+                            </Stack>
+                          </HStack>
+                        </MenuItem>
+                        <MenuItem
+                          value="filter-components"
+                          onClick={() => setFilterComponentsByProteins(!filterComponentsByProteins)}
+                        >
+                          <HStack gap={2} width="full">
+                            {filterComponentsByProteins && <FiCheck />}
+                            <Stack gap={0} flex={1}>
+                              <Text fontWeight="medium">Filter to matching components</Text>
+                              <Text fontSize="xs" opacity={0.7}>Hide components without highlighted proteins</Text>
+                            </Stack>
+                          </HStack>
+                        </MenuItem>
+                      </MenuContent>
+                    </MenuRoot>
                   </HStack>
                   <Button size="xs" variant="ghost" onClick={() => setIsNodeProteinOpen(!isNodeProteinOpen)}>{isNodeProteinOpen ? "Hide" : "Show"}</Button>
                 </HStack>
