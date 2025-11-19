@@ -22,6 +22,7 @@ export default function PerformanceIndicator({
     yellow: "yellow.500",
     orange: "orange.500",
     red: "red.500",
+    purple: "purple.500",
   }
 
   const badgeColor = colorMap[currentTier.color] || "gray.500"
@@ -50,10 +51,19 @@ export default function PerformanceIndicator({
         ]
       case 'extreme':
         return [
-          "Filter by edge weight, components, or specific proteins",
-          "Use grid layout for best performance",
-          "Avoid force-directed layouts (fcose, cose-bilkent)",
-          "Layout computation may take 30+ seconds or freeze the browser"
+          "Very large network - filtering strongly recommended",
+          "Progressive rendering will be used to improve load times",
+          "Labels and edge arrows will be hidden by default",
+          "Use grid layout only - force-directed layouts will be very slow",
+          "Consider filtering by edge weight, components, or specific proteins"
+        ]
+      case 'massive':
+        return [
+          "Extremely large network - data filtering is essential",
+          "Only grid layout is recommended for networks this size",
+          "All visual features will be simplified for performance",
+          "Progressive rendering and viewport culling will be enabled",
+          "Strongly consider filtering to reduce network size below 2000 nodes"
         ]
       default:
         return []

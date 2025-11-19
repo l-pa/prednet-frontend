@@ -10,6 +10,8 @@ import cytoscapeFcose from 'cytoscape-fcose'
 import cytoscapeCoseBilkent from 'cytoscape-cose-bilkent'
 // @ts-ignore - no type definitions available
 import cytoscapeElk from 'cytoscape-elk'
+// @ts-ignore - no type definitions available
+import cytoscapeCola from 'cytoscape-cola'
 
 try {
   cytoscape.use(cytoscapeFcose)
@@ -23,6 +25,13 @@ try {
   console.log('✓ cytoscape-cose-bilkent registered')
 } catch (e) {
   console.error('Failed to register cose-bilkent:', e)
+}
+
+try {
+  cytoscape.use(cytoscapeCola)
+  console.log('✓ cytoscape-cola registered')
+} catch (e) {
+  console.error('Failed to register cola:', e)
 }
 
 try {
@@ -187,6 +196,44 @@ export default function NetworkCore({
             "border-color": "#2196F3",
             "border-opacity": 1,
             "z-index": 9999,
+          },
+        },
+        {
+          selector: "node[componentHighlight = 1]",
+          style: {
+            "border-width": 2,
+            "border-color": "#4CAF50",
+            "border-opacity": 0.7,
+            "border-style": "dashed",
+          },
+        },
+        {
+          selector: "node[componentProteins]",
+          style: {
+            // Show component proteins above the node, keeping original label visible
+            label: (ele: any) => {
+              const original = ele.data('label') || ''
+              const proteins = ele.data('componentProteins') || ''
+              return proteins ? `[${proteins}]\n${original}` : original
+            },
+            "font-size": 8,
+            "font-weight": 600,
+            "text-opacity": 1,
+            "min-zoomed-font-size": 0,
+            "text-valign": "center",
+            "text-halign": "center",
+            "text-wrap": "wrap",
+            "text-max-width": "150px",
+            "text-background-color": "#4CAF50",
+            "text-background-opacity": 0.9,
+            "text-background-shape": "roundrectangle",
+            "text-background-padding": "5px",
+            "text-border-width": 1,
+            "text-border-color": "#ffffff",
+            "text-border-opacity": 0.9,
+            color: "#ffffff",
+            "z-index-compare": "manual",
+            "z-index": 100003,
           },
         },
         {

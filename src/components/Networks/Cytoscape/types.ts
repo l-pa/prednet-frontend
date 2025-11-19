@@ -40,10 +40,19 @@ export interface ProteinCount {
   other_components_network?: number
 }
 
+export interface EdgeTypeStats {
+  matched_prediction: number
+  matched_reference: number
+  prediction: number
+  reference: number
+  total: number
+}
+
 export interface NodeInfo {
   componentId?: number
   componentSize?: number
   proteinCounts?: ProteinCount[]
+  edgeTypeStats?: EdgeTypeStats
 }
 
 // ============================================================================
@@ -108,6 +117,9 @@ export interface NetworkState {
   
   // Component state
   localComponentId: number | null
+  
+  // Data source state
+  dataSource: "uniprot" | "stringdb"
 }
 
 export interface NetworkStateActions {
@@ -149,6 +161,9 @@ export interface NetworkStateActions {
   
   // Component actions
   setLocalComponentId: (id: number | null) => void
+  
+  // Data source actions
+  setDataSource: (source: "uniprot" | "stringdb") => void
 }
 
 export interface StyleState {
@@ -255,6 +270,7 @@ export interface PerformanceWarningProps {
   tier: PerformanceTier
   nodeCount: number
   edgeCount: number
+  currentLayout?: string
   onDismiss: () => void
   onApplyRecommendation?: (action: RecommendationAction) => void
 }
@@ -372,6 +388,7 @@ export interface GOTerm {
   name: string
   parents: string[]
   evidence?: string
+  p_value?: number | null
 }
 
 export interface GOTermsByDomain {

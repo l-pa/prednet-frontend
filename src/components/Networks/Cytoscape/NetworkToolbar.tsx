@@ -1,5 +1,5 @@
 import { HStack, Button, Text, Tooltip } from "@chakra-ui/react"
-import { FiPlay, FiRefreshCw } from "react-icons/fi"
+import { FiPlay, FiRefreshCw, FiFilter } from "react-icons/fi"
 import type { ReactNode } from "react"
 
 interface NetworkToolbarProps {
@@ -11,6 +11,7 @@ interface NetworkToolbarProps {
   onResetView: () => void
   onToggleStylePanel: () => void
   onToggleInfoPanel: () => void
+  onToggleEdgeFilter?: () => void
   performanceIndicator?: ReactNode
 }
 
@@ -19,8 +20,10 @@ const availableLayouts = [
   "circle",
   "concentric",
   "breadthfirst",
+  "cose",
   "fcose",
   "cose-bilkent",
+  "cola",
   "elk",
   "concentric-attribute",
 ]
@@ -32,6 +35,7 @@ export default function NetworkToolbar({
   onLayoutChange,
   onToggleStylePanel,
   onToggleInfoPanel,
+  onToggleEdgeFilter,
   onRunLayout,
   onResetView,
   performanceIndicator,
@@ -89,6 +93,11 @@ export default function NetworkToolbar({
       <HStack gap={1} flexShrink={0}>
         <Button size="xs" variant="outline" onClick={onToggleStylePanel}>Style</Button>
         <Button size="xs" variant="outline" onClick={onToggleInfoPanel}>Info</Button>
+        {onToggleEdgeFilter && (
+          <Button size="xs" variant="outline" onClick={onToggleEdgeFilter} title="Filter components by edge types">
+            <FiFilter />
+          </Button>
+        )}
       </HStack>
       <Tooltip.Root openDelay={200}>
         <Tooltip.Trigger>

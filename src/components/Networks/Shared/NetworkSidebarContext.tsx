@@ -57,6 +57,9 @@ export interface NetworkSidebarState {
   comparisonModalOpen: boolean
   setComparisonModalOpen: (open: boolean) => void
   
+  // Data source
+  dataSource: "uniprot" | "stringdb"
+  
   // Refs (renderer-agnostic)
   graphRef: React.RefObject<any>
   hoverRevertTimeoutRef: React.RefObject<number | null>

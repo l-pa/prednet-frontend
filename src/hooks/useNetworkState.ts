@@ -50,6 +50,9 @@ export function useNetworkState({
   
   // Component state
   const [localComponentId, setLocalComponentId] = useState<number | null>(null)
+  
+  // Data source state
+  const [dataSource, setDataSource] = useState<"uniprot" | "stringdb">("uniprot")
 
   // Memoized state object
   const state = useMemo<NetworkState>(() => ({
@@ -76,6 +79,7 @@ export function useNetworkState({
     savingFavorite,
     savedFavoriteOnce,
     localComponentId,
+    dataSource,
   }), [
     selectedLayout,
     isLayoutRunning,
@@ -127,6 +131,7 @@ export function useNetworkState({
     setSavingFavorite,
     setSavedFavoriteOnce,
     setLocalComponentId,
+    setDataSource,
   }), [])
 
   return { state, actions }

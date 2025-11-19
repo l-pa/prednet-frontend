@@ -46,6 +46,28 @@ export function useNetworkLayout({
           // Use a small delay to ensure layout positions are finalized
           setTimeout(() => {
             try {
+              // For ELK layout, check if nodes are visible before fitting
+              if (selectedLayout === 'elk') {
+                const nodes = cy.nodes()
+                let hasValidPositions = false
+                
+                // Check if at least some nodes have reasonable positions
+                nodes.forEach((node) => {
+                  const pos = node.position()
+                  if (pos && isFinite(pos.x) && isFinite(pos.y) && 
+                      Math.abs(pos.x) < 1e6 && Math.abs(pos.y) < 1e6) {
+                    hasValidPositions = true
+                  }
+                })
+                
+                if (!hasValidPositions) {
+                  console.warn('ELK layout produced invalid positions, resetting to grid')
+                  // Fallback to grid layout if ELK fails
+                  cy.layout({ name: 'grid', animate: false, fit: true }).run()
+                  return
+                }
+              }
+              
               cy.fit(undefined, 50)
             } catch (fitError) {
               console.error('Error fitting view:', fitError)
@@ -143,21 +165,95 @@ export function useNetworkLayout({
             animate: false,
             fit: false,
           }
+        } else if (name === 'cola') {
+          // Use cola configuration based on network size
+          const nodeCount = cy.nodes().length
+          if (nodeCount < 500) {
+            layoutOptions = {
+              name: 'cola',
+              animate: false,
+              refresh: 1,
+              maxSimulationTime: 30000,
+              ungrabifyWhileSimulating: false,
+              fit: false,
+              padding: 30,
+              nodeSpacing: 10,
+              edgeLength: 100,
+              convergenceThreshold: 0.01,
+              randomize: false,
+              avoidOverlap: true,
+              handleDisconnected: true,
+            }
+          } else if (nodeCount < 1000) {
+            layoutOptions = {
+              name: 'cola',
+              animate: false,
+              refresh: 1,
+              maxSimulationTime: 20000,
+              ungrabifyWhileSimulating: false,
+              fit: false,
+              padding: 30,
+              nodeSpacing: 10,
+              edgeLength: 100,
+              convergenceThreshold: 0.05,
+              randomize: false,
+              avoidOverlap: false,
+              handleDisconnected: true,
+            }
+          } else {
+            layoutOptions = {
+              name: 'cola',
+              animate: false,
+              refresh: 1,
+              maxSimulationTime: 10000,
+              ungrabifyWhileSimulating: false,
+              fit: false,
+              padding: 30,
+              nodeSpacing: 10,
+              edgeLength: 100,
+              convergenceThreshold: 0.1,
+              randomize: false,
+              avoidOverlap: false,
+              handleDisconnected: true,
+            }
+          }
         } else if (name === 'elk') {
-          layoutOptions = {
-            name: 'elk',
-            nodeDimensionsIncludeLabels: true,
-            fit: false,
-            animate: false,
-            worker: true,
-            elk: {
-              algorithm: 'force',
-              'elk.force.repulsion': 1,
-              'elk.force.temperature': 0.01,
-              'elk.force.iterations': 300,
-              'elk.spacing.componentComponent': 5,
-              'elk.spacing.nodeNode': 15,
-            },
+          const nodeCount = cy.nodes().length
+          // Adjust ELK parameters based on network size
+          if (nodeCount > 500) {
+            // For large networks, use layered algorithm which is more stable
+            layoutOptions = {
+              name: 'elk',
+              nodeDimensionsIncludeLabels: false,
+              fit: false,
+              animate: false,
+              worker: true,
+              elk: {
+                algorithm: 'layered',
+                'elk.direction': 'DOWN',
+                'elk.spacing.nodeNode': 30,
+                'elk.spacing.componentComponent': 50,
+                'elk.layered.spacing.nodeNodeBetweenLayers': 30,
+                'elk.layered.spacing.edgeNodeBetweenLayers': 20,
+              },
+            }
+          } else {
+            // For smaller networks, use force algorithm
+            layoutOptions = {
+              name: 'elk',
+              nodeDimensionsIncludeLabels: true,
+              fit: false,
+              animate: false,
+              worker: true,
+              elk: {
+                algorithm: 'force',
+                'elk.force.repulsion': 20,
+                'elk.force.temperature': 0.001,
+                'elk.force.iterations': 300,
+                'elk.spacing.componentComponent': 50,
+                'elk.spacing.nodeNode': 30,
+              },
+            }
           }
         } else if (name === 'dagre') {
           layoutOptions = {
@@ -250,6 +346,25 @@ export function getLayoutOptions(layoutName: string): any {
         fit: false,
       }
     
+    case 'cola':
+      // Cola layout with default configuration
+      // Note: For size-based optimization, use getColaOptionsForSize from cytoscapeUtils
+      return {
+        name: 'cola',
+        animate: false,
+        refresh: 1,
+        maxSimulationTime: 30000,
+        ungrabifyWhileSimulating: false,
+        fit: false,
+        padding: 30,
+        nodeSpacing: 10,
+        edgeLength: 100,
+        convergenceThreshold: 0.01,
+        randomize: false,
+        avoidOverlap: true,
+        handleDisconnected: true,
+      }
+    
     case 'elk':
       return {
         name: 'elk',
@@ -262,8 +377,8 @@ export function getLayoutOptions(layoutName: string): any {
           'elk.force.repulsion': 20,
           'elk.force.temperature': 0.001,
           'elk.force.iterations': 300,
-          'elk.spacing.componentComponent': 10,
-          'elk.spacing.nodeNode': 20,
+          'elk.spacing.componentComponent': 50,
+          'elk.spacing.nodeNode': 30,
         },
       }
     

@@ -166,6 +166,26 @@ const GOTermNode = memo(function GOTermNode({
               >
                 {term.name}
               </Text>
+              {/* Protein Count Badge */}
+              {mode === "union" && (
+                <Box
+                  px={2}
+                  py={0.5}
+                  bg={isShared ? domainColor : "gray.100"}
+                  color={isShared ? "white" : "gray.700"}
+                  _dark={{ 
+                    bg: isShared ? domainColor : "gray.700",
+                    color: isShared ? "white" : "gray.200"
+                  }}
+                  rounded="full"
+                  fontSize="xs"
+                  fontWeight="medium"
+                  flexShrink={0}
+                  title={`Present in ${term.proteins.length} of ${allProteins.length} proteins`}
+                >
+                  {term.proteins.length}/{allProteins.length}
+                </Box>
+              )}
             </HStack>
           </Tooltip.Trigger>
           <Tooltip.Positioner>

@@ -75,6 +75,11 @@ const ProteinsPage = () => {
   const [proteinTypesMap, setProteinTypesMap] = useState<Record<string, string[]>>({})
   const [infoProtein, setInfoProtein] = useState<string | null>(null)
   const [comparisonModalOpen, setComparisonModalOpen] = useState(false)
+  // Component size filter
+  const [minComponentSize, setMinComponentSize] = useState<string>("")
+  const [maxComponentSize, setMaxComponentSize] = useState<string>("")
+  // Type filter
+  const [selectedTypes, setSelectedTypes] = useState<Set<string>>(new Set())
   const { showErrorToast } = useCustomToast()
   const [renderer, setRenderer] = useState<"cytoscape" | "sigma" | "reagraph" | "graphin">(() => {
     try {
@@ -101,7 +106,7 @@ const ProteinsPage = () => {
     }
   }
 
-  const fetchProteins = async (networkName: string, nextPage = 1, q?: string, selectedParam?: string) => {
+  const fetchProteins = async (networkName: string, nextPage = 1, q?: string, selectedParam?: string, types?: Set<string>) => {
     setLoadingProteins(true)
     try {
       const baseUrl = OpenAPI.BASE || "http://localhost"
@@ -118,6 +123,9 @@ const ProteinsPage = () => {
       }
       if (selectedParam && selectedParam.trim()) {
         query.set("selected", selectedParam.trim())
+      }
+      if (types && types.size > 0) {
+        query.set("types", Array.from(types).join(","))
       }
       const url = `${baseUrl}/api/v1/proteins/${networkName}?${query.toString()}`
       const response = await fetch(url)
@@ -512,6 +520,54 @@ const ProteinsPage = () => {
                     )}
                   </Flex>
                 </Card.Header>
+                {/* Type Filter */}
+                {selectedNetwork && (
+                  <Box px={6} py={3} borderBottomWidth="1px">
+                    <HStack gap={2} flexWrap="wrap">
+                      <Text fontSize="sm" fontWeight="500">Filter by type:</Text>
+                      {['prediction', 'matched_prediction', 'reference', 'matched_reference'].map(type => (
+                        <Button
+                          key={type}
+                          size="sm"
+                          variant={selectedTypes.has(type) ? 'solid' : 'outline'}
+                          onClick={() => {
+                            const next = new Set(selectedTypes)
+                            if (selectedTypes.has(type)) {
+                              next.delete(type)
+                            } else {
+                              next.add(type)
+                            }
+                            setSelectedTypes(next)
+                            // Auto-apply filter
+                            if (selectedNetwork) {
+                              const selectedParam = Array.from(appliedSelected).join(" ")
+                              const qParam = appliedSelected.size > 0 ? "" : appliedQuery
+                              fetchProteins(selectedNetwork, 1, qParam, selectedParam, next)
+                            }
+                          }}
+                        >
+                          {type.replace('_', ' ')}
+                        </Button>
+                      ))}
+                      {selectedTypes.size > 0 && (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => {
+                            setSelectedTypes(new Set())
+                            if (selectedNetwork) {
+                              const selectedParam = Array.from(appliedSelected).join(" ")
+                              const qParam = appliedSelected.size > 0 ? "" : appliedQuery
+                              fetchProteins(selectedNetwork, 1, qParam, selectedParam, new Set())
+                            }
+                          }}
+                        >
+                          Clear all
+                        </Button>
+                      )}
+                    </HStack>
+                  </Box>
+                )}
                 <Card.Body>
                   {!selectedNetwork ? (
                     <Text color="gray.500" textAlign="center" py={8}>
@@ -688,7 +744,42 @@ const ProteinsPage = () => {
             {selectedNetwork && (
               <Card.Root>
                 <Card.Header>
-                  <Heading size="md">Components membership</Heading>
+                  <Flex justify="space-between" align="center" w="full" gap={4} flexWrap="wrap">
+                    <Heading size="md">Components membership</Heading>
+                    <HStack gap={2}>
+                      <Text fontSize="sm" opacity={0.7}>Filter by size:</Text>
+                      <Input
+                        placeholder="Min"
+                        value={minComponentSize}
+                        onChange={(e) => setMinComponentSize(e.target.value)}
+                        size="sm"
+                        width="80px"
+                        type="number"
+                        min="1"
+                      />
+                      <Text fontSize="sm" opacity={0.7}>to</Text>
+                      <Input
+                        placeholder="Max"
+                        value={maxComponentSize}
+                        onChange={(e) => setMaxComponentSize(e.target.value)}
+                        size="sm"
+                        width="80px"
+                        type="number"
+                        min="1"
+                      />
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          setMinComponentSize("")
+                          setMaxComponentSize("")
+                        }}
+                        disabled={!minComponentSize && !maxComponentSize}
+                      >
+                        Clear
+                      </Button>
+                    </HStack>
+                  </Flex>
                 </Card.Header>
                 <Card.Body>
                   {componentsLoading ? (
@@ -697,18 +788,30 @@ const ProteinsPage = () => {
                     </Flex>
                   ) : componentsResult ? (
                     <VStack align="stretch" gap={3}>
-                      {componentsResult.files.map((f) => (
+                      {componentsResult.files.map((f) => {
+                        // Filter components by size
+                        const minSize = minComponentSize ? parseInt(minComponentSize, 10) : 0
+                        const maxSize = maxComponentSize ? parseInt(maxComponentSize, 10) : Infinity
+                        const filteredComponents = f.components.filter((c) => {
+                          return c.size >= minSize && c.size <= maxSize
+                        })
+                        
+                        if (filteredComponents.length === 0) return null
+                        
+                        return (
                         <Box key={f.filename} borderWidth="1px" borderRadius="md" p={3}>
                           <Text fontWeight={600} mb={2}>
                             {f.filename}
                           </Text>
-                          {f.components.length === 0 ? (
+                          {filteredComponents.length === 0 ? (
                             <Text fontSize="sm" opacity={0.7}>
-                              No selected proteins present in this file
+                              {f.components.length === 0 
+                                ? "No selected proteins present in this file"
+                                : "No components match the size filter"}
                             </Text>
                           ) : (
                             <VStack align="stretch" gap={2}>
-                              {f.components.map((c) => (
+                              {filteredComponents.map((c) => (
                                 <Box key={c.component_id} borderWidth="1px" borderRadius="md" p={2}>
                                   <HStack justify="space-between">
                                     <HStack gap={3}>
@@ -777,7 +880,8 @@ const ProteinsPage = () => {
                             </VStack>
                           )}
                         </Box>
-                      ))}
+                        )
+                      })}
                     </VStack>
                   ) : (
                     <Text fontSize="sm" opacity={0.7}>

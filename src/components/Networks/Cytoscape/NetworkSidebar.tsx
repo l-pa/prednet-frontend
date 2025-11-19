@@ -22,6 +22,7 @@ export default function NetworkSidebar() {
     computeComponents, previewComponent, clearHoverPreview, highlightComponent,
     highlightProteins, setHighlightProteins, expandedProteins, setExpandedProteins,
     selectedForComparison, setSelectedForComparison, comparisonModalOpen, setComparisonModalOpen,
+    dataSource,
     cyRef, hoverRevertTimeoutRef, prevViewRef,
   } = useNetworkSidebar()
   
@@ -387,7 +388,7 @@ export default function NetworkSidebar() {
                   <HStack gap={1} align="center">
                     <Text fontWeight="bold">Node protein distribution</Text>
                     <Tooltip.Root openDelay={200}>
-                      <Tooltip.Trigger>
+                      <Tooltip.Trigger asChild>
                         <Button size="xs" variant="ghost" title="Highlight options">
                           <FiSettings />
                         </Button>
@@ -415,9 +416,56 @@ export default function NetworkSidebar() {
                         const filtered = proteinCountsSorted.filter(({ protein }) => nodeLabelProteins.includes(protein))
                         if (filtered.length === 0) return <Text opacity={0.7}>(no proteins in label)</Text>
                         return (
-                          <Stack gap={3} overflowY="auto">
-                            {filtered.map(renderProteinItem)}
-                          </Stack>
+                          <>
+                            {/* Compare All Node Proteins Button */}
+                            {filtered.length >= 2 && (
+                              <Box mb={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  colorScheme="blue"
+                                  onClick={() => {
+                                    // Select all proteins from the node
+                                    const proteins = filtered.map(p => p.protein)
+                                    setSelectedForComparison(new Set(proteins))
+                                    // Open comparison modal
+                                    setComparisonModalOpen(true)
+                                    
+                                    // Announce for screen readers
+                                    if (announcementRef.current) {
+                                      announcementRef.current.textContent = `Comparing ${proteins.length} proteins from this node`
+                                    }
+                                  }}
+                                  aria-label={`Compare all ${filtered.length} proteins from this node`}
+                                >
+                                  Compare All Node Proteins ({filtered.length})
+                                </Button>
+                              </Box>
+                            )}
+                            
+                            <Stack gap={3} overflowY="auto">
+                              {filtered.map(renderProteinItem)}
+                            </Stack>
+                            
+                            {selectedForComparison.size >= 2 && (
+                              <Box mt={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  onClick={() => setComparisonModalOpen(true)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      setComparisonModalOpen(true)
+                                    }
+                                  }}
+                                  aria-label={`View comparison of ${selectedForComparison.size} selected proteins`}
+                                >
+                                  View Comparison ({selectedForComparison.size} proteins)
+                                </Button>
+                              </Box>
+                            )}
+                          </>
                         )
                       })()
                     ) : (
@@ -494,6 +542,7 @@ export default function NetworkSidebar() {
         selectedProteins={Array.from(selectedForComparison)}
         networkName={networkName}
         onRemoveProtein={handleRemoveProtein}
+        dataSource={dataSource}
       />
     )}
   </>

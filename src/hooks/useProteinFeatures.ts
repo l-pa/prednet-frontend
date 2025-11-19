@@ -7,6 +7,7 @@ interface UseProteinFeaturesParams {
   networkName: string
   proteins: string[]
   enabled?: boolean
+  source?: "uniprot" | "stringdb"
 }
 
 interface ProteinFeaturesResponse {
@@ -17,9 +18,10 @@ export function useProteinFeatures({
   networkName,
   proteins,
   enabled = true,
+  source = "uniprot",
 }: UseProteinFeaturesParams) {
   return useQuery({
-    queryKey: ["protein-features", networkName, proteins.sort().join(",")],
+    queryKey: ["protein-features", networkName, proteins.sort().join(","), source],
     queryFn: async () => {
       if (proteins.length === 0) {
         throw new Error("No proteins specified")
@@ -36,6 +38,7 @@ export function useProteinFeatures({
         const response = await axios.get<ProteinFeaturesResponse>(url, {
           params: {
             proteins: proteinsParam,
+            source: source,
           },
           headers: token ? {
             Authorization: `Bearer ${token}`,

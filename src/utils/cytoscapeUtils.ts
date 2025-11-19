@@ -1,4 +1,149 @@
 import type cytoscape from 'cytoscape'
+import { getColaOptionsForSize, DEFAULT_COLA_OPTIONS } from './performanceUtils'
+
+/**
+ * Filter for edge type ratios
+ */
+export interface EdgeTypeFilter {
+  minMatchedPredictionRatio?: number
+  maxMatchedPredictionRatio?: number
+  minUnmatchedPredictionRatio?: number
+  maxUnmatchedPredictionRatio?: number
+  minMatchedReferenceRatio?: number
+  maxMatchedReferenceRatio?: number
+  minUnmatchedReferenceRatio?: number
+  maxUnmatchedReferenceRatio?: number
+}
+
+/**
+ * Check if component edge stats match the filter criteria
+ */
+export function matchesEdgeTypeFilter(
+  stats: {
+    matched_prediction: number
+    matched_reference: number
+    prediction: number
+    reference: number
+    total: number
+  },
+  filter: EdgeTypeFilter
+): boolean {
+  if (stats.total === 0) return false
+  
+  const totalPred = stats.matched_prediction + stats.prediction
+  const totalRef = stats.matched_reference + stats.reference
+  
+  // Calculate ratios
+  const matchedPredRatio = totalPred > 0 ? stats.matched_prediction / totalPred : 0
+  const unmatchedPredRatio = totalPred > 0 ? stats.prediction / totalPred : 0
+  const matchedRefRatio = totalRef > 0 ? stats.matched_reference / totalRef : 0
+  const unmatchedRefRatio = totalRef > 0 ? stats.reference / totalRef : 0
+  
+  // Check each filter criterion
+  if (filter.minMatchedPredictionRatio !== undefined && matchedPredRatio < filter.minMatchedPredictionRatio) return false
+  if (filter.maxMatchedPredictionRatio !== undefined && matchedPredRatio > filter.maxMatchedPredictionRatio) return false
+  if (filter.minUnmatchedPredictionRatio !== undefined && unmatchedPredRatio < filter.minUnmatchedPredictionRatio) return false
+  if (filter.maxUnmatchedPredictionRatio !== undefined && unmatchedPredRatio > filter.maxUnmatchedPredictionRatio) return false
+  if (filter.minMatchedReferenceRatio !== undefined && matchedRefRatio < filter.minMatchedReferenceRatio) return false
+  if (filter.maxMatchedReferenceRatio !== undefined && matchedRefRatio > filter.maxMatchedReferenceRatio) return false
+  if (filter.minUnmatchedReferenceRatio !== undefined && unmatchedRefRatio < filter.minUnmatchedReferenceRatio) return false
+  if (filter.maxUnmatchedReferenceRatio !== undefined && unmatchedRefRatio > filter.maxUnmatchedReferenceRatio) return false
+  
+  return true
+}
+
+/**
+ * Filter components by edge type ratios and return matching component IDs
+ */
+export function filterComponentsByEdgeTypes(
+  cy: cytoscape.Core,
+  filter: EdgeTypeFilter
+): Set<number> {
+  const matchingComponents = new Set<number>()
+  
+  if (!cy) return matchingComponents
+  
+  try {
+    const { nidToCid, cidToNodeIds } = computeComponents(cy)
+    
+    // Check each component
+    cidToNodeIds.forEach((nodeIds, componentId) => {
+      const stats = computeComponentEdgeStats(cy, componentId, nidToCid)
+      if (matchesEdgeTypeFilter(stats, filter)) {
+        matchingComponents.add(componentId)
+      }
+    })
+  } catch (error) {
+    console.error('Failed to filter components by edge types:', error)
+  }
+  
+  return matchingComponents
+}
+
+/**
+ * Compute edge type statistics for a specific component
+ */
+export function computeComponentEdgeStats(
+  cy: cytoscape.Core,
+  componentId: number,
+  nidToCid: Map<string, number>
+): {
+  matched_prediction: number
+  matched_reference: number
+  prediction: number
+  reference: number
+  total: number
+} {
+  const stats = {
+    matched_prediction: 0,
+    matched_reference: 0,
+    prediction: 0,
+    reference: 0,
+    total: 0
+  }
+  
+  if (!cy) return stats
+  
+  try {
+    // Get all nodes in this component
+    const componentNodes = new Set<string>()
+    nidToCid.forEach((cid, nodeId) => {
+      if (cid === componentId) {
+        componentNodes.add(nodeId)
+      }
+    })
+    
+    // Count edges within this component by type
+    cy.edges().forEach((edge) => {
+      try {
+        const source = String(edge.data('source'))
+        const target = String(edge.data('target'))
+        
+        // Only count edges within this component
+        if (componentNodes.has(source) && componentNodes.has(target)) {
+          const edgeType = edge.data('type') || 'unknown'
+          stats.total++
+          
+          if (edgeType === 'matched_prediction') {
+            stats.matched_prediction++
+          } else if (edgeType === 'matched_reference') {
+            stats.matched_reference++
+          } else if (edgeType === 'prediction') {
+            stats.prediction++
+          } else if (edgeType === 'reference') {
+            stats.reference++
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to process edge for stats:', error)
+      }
+    })
+  } catch (error) {
+    console.error('Failed to compute component edge stats:', error)
+  }
+  
+  return stats
+}
 
 /**
  * Deterministic connected components computation (stable IDs across calls)
@@ -311,3 +456,119 @@ export function highlightComponent(
     console.error('Unexpected error in highlightComponent:', error)
   }
 }
+
+/**
+ * Progressive rendering configuration for large networks
+ * Renders nodes in batches to improve perceived performance
+ */
+export interface ProgressiveRenderConfig {
+  enabled: boolean
+  batchSize: number
+  batchDelay: number
+  prioritizeVisible: boolean
+}
+
+/**
+ * Progressive rendering configurations by performance tier
+ */
+export const PROGRESSIVE_RENDER_CONFIG: Record<string, ProgressiveRenderConfig> = {
+  extreme: {
+    enabled: true,
+    batchSize: 500,
+    batchDelay: 50,
+    prioritizeVisible: true
+  },
+  massive: {
+    enabled: true,
+    batchSize: 1000,
+    batchDelay: 100,
+    prioritizeVisible: true
+  }
+}
+
+/**
+ * Renders network elements progressively in batches
+ * This improves perceived performance for very large networks (>2000 nodes)
+ * by displaying nodes incrementally rather than all at once
+ * 
+ * @param cy - Cytoscape instance
+ * @param elements - Array of node and edge elements to render
+ * @param config - Progressive rendering configuration
+ * @param onProgress - Optional callback for progress updates (current batch, total batches)
+ * @returns Promise that resolves when all elements are rendered
+ */
+export function renderProgressively(
+  cy: cytoscape.Core,
+  elements: cytoscape.ElementDefinition[],
+  config: ProgressiveRenderConfig,
+  onProgress?: (current: number, total: number) => void
+): Promise<void> {
+  return new Promise((resolve) => {
+    if (!config.enabled || elements.length === 0) {
+      // If progressive rendering is disabled or no elements, add all at once
+      try {
+        cy.add(elements)
+      } catch (error) {
+        console.error('Failed to add elements:', error)
+      }
+      resolve()
+      return
+    }
+    
+    // Split elements into nodes and edges
+    const nodes = elements.filter(el => el.group === 'nodes' || !el.group)
+    const edges = elements.filter(el => el.group === 'edges')
+    
+    // Create batches of nodes
+    const batches: cytoscape.ElementDefinition[][] = []
+    for (let i = 0; i < nodes.length; i += config.batchSize) {
+      batches.push(nodes.slice(i, i + config.batchSize))
+    }
+    
+    let currentBatch = 0
+    const totalBatches = batches.length
+    
+    function renderNextBatch() {
+      if (currentBatch >= totalBatches) {
+        // All nodes rendered, now add edges
+        try {
+          cy.add(edges)
+        } catch (error) {
+          console.error('Failed to add edges:', error)
+        }
+        resolve()
+        return
+      }
+      
+      try {
+        // Add current batch of nodes
+        cy.add(batches[currentBatch])
+        
+        // Report progress
+        if (onProgress) {
+          onProgress(currentBatch + 1, totalBatches)
+        }
+        
+        currentBatch++
+        
+        // Schedule next batch using requestAnimationFrame for smooth rendering
+        requestAnimationFrame(() => {
+          setTimeout(renderNextBatch, config.batchDelay)
+        })
+      } catch (error) {
+        console.error(`Failed to render batch ${currentBatch}:`, error)
+        // Continue with next batch even if current batch fails
+        currentBatch++
+        requestAnimationFrame(() => {
+          setTimeout(renderNextBatch, config.batchDelay)
+        })
+      }
+    }
+    
+    // Start rendering
+    renderNextBatch()
+  })
+}
+
+// Cola layout configuration is now exported from performanceUtils.ts
+// Import DEFAULT_COLA_OPTIONS and getColaOptionsForSize from there

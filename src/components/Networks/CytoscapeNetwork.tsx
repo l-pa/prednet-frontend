@@ -5,6 +5,7 @@ import { OpenAPI } from "@/client"
 import NetworkToolbar from "@/components/Networks/Cytoscape/NetworkToolbar"
 import StylePanel from "@/components/Networks/Cytoscape/StylePanel"
 import InfoPanel from "@/components/Networks/Cytoscape/InfoPanel"
+import ComponentEdgeFilter from "@/components/Networks/Cytoscape/ComponentEdgeFilter"
 import NetworkSidebar from "@/components/Networks/Shared/NetworkSidebar"
 import { NetworkSidebarProvider } from "@/components/Networks/Shared/NetworkSidebarContext"
 import NetworkCore from "@/components/Networks/Cytoscape/NetworkCore"
@@ -25,7 +26,8 @@ import {
 } from "@/utils/cytoscapeUtils"
 import { 
   storeLayoutPreference, 
-  getLayoutPreference 
+  getLayoutPreference,
+  getColaOptionsForSize 
 } from "@/utils/performanceUtils"
 import type { CytoscapeGraph, RecommendationAction } from "@/components/Networks/Cytoscape/types"
 import type { ProteinCount } from "@/components/Networks/Shared/types"
@@ -75,6 +77,11 @@ const CytoscapeNetwork = ({
   
   // Track layout start time for progress overlay
   const [layoutStartTime, setLayoutStartTime] = useState<number>(Date.now())
+  
+  // Edge filter state
+  const [isEdgeFilterOpen, setIsEdgeFilterOpen] = useState(false)
+  const [edgeFilter, setEdgeFilter] = useState<any>(null)
+  const [filteredComponents, setFilteredComponents] = useState<Set<number> | null>(null)
   
   // Calculate network size for performance tier
   const nodeCount = useMemo(() => (data.nodes || []).length, [data.nodes])
@@ -285,7 +292,19 @@ const CytoscapeNetwork = ({
           .filter(pc => pc && typeof pc.protein === 'string' && typeof pc.count === 'number')
           .sort((a, b) => (b.count - a.count) || a.protein.localeCompare(b.protein))
         
-        networkActions.setSelectedNodeInfo({ componentId, componentSize, proteinCounts })
+        // Compute edge type statistics for this component
+        let edgeTypeStats: any = undefined
+        if (cy && typeof componentId === 'number') {
+          try {
+            const { computeComponentEdgeStats } = await import('@/utils/cytoscapeUtils')
+            const { nidToCid } = computeComponents(cy)
+            edgeTypeStats = computeComponentEdgeStats(cy, componentId, nidToCid)
+          } catch (error) {
+            console.warn('Failed to compute edge statistics:', error)
+          }
+        }
+        
+        networkActions.setSelectedNodeInfo({ componentId, componentSize, proteinCounts, edgeTypeStats })
       } catch (err) {
         console.error('Failed to fetch node component info:', err)
         networkActions.setSelectedNodeInfo(null)
@@ -688,6 +707,8 @@ const CytoscapeNetwork = ({
             ? { name, quality: 'default', randomize: true, animate: false, fit: false, idealEdgeLength: 50, nodeRepulsion: 4500, edgeElasticity: 0.45, gravity: 0.25, numIter: 2500, packComponents: true, tilingPaddingVertical: 50, tilingPaddingHorizontal: 50 }
             : name === 'cose-bilkent'
             ? { name, quality: 'default', randomize: false, nodeRepulsion: 4500, idealEdgeLength: 50, edgeElasticity: 0.45, nestingFactor: 0.1, gravity: 0.25, numIter: 2500, tile: true, tilingPaddingVertical: 50, tilingPaddingHorizontal: 50, animate: false, fit: false }
+            : name === 'cola'
+            ? getColaOptionsForSize(nodeCount)
             : name === 'elk'
             ? ({ name: 'elk', nodeDimensionsIncludeLabels: true, fit: false, animate: false, worker: true, elk: { algorithm: 'force', 'elk.force.repulsion': 20, 'elk.force.temperature': 0.001, 'elk.force.iterations': 300, 'elk.spacing.componentComponent': 10, 'elk.spacing.nodeNode': 20 } } as any)
             : name === 'dagre'
@@ -780,6 +801,8 @@ const CytoscapeNetwork = ({
           ? { name, quality: 'default', randomize: true, animate: false, fit: false, idealEdgeLength: 50, nodeRepulsion: 4500, edgeElasticity: 0.45, gravity: 0.25, numIter: 2500, packComponents: true, tilingPaddingVertical: 50, tilingPaddingHorizontal: 50 }
           : name === 'cose-bilkent'
           ? { name, quality: 'default', randomize: false, nodeRepulsion: 4500, idealEdgeLength: 50, edgeElasticity: 0.45, nestingFactor: 0.1, gravity: 0.25, numIter: 2500, tile: true, tilingPaddingVertical: 50, tilingPaddingHorizontal: 50, animate: false, fit: false }
+          : name === 'cola'
+          ? getColaOptionsForSize(nodeCount)
           : name === 'elk'
           ? { name: 'elk', nodeDimensionsIncludeLabels: true, fit: false, animate: false, worker: true, elk: { algorithm: 'force', 'elk.force.repulsion': 20, 'elk.force.temperature': 0.001, 'elk.force.iterations': 300, 'elk.spacing.componentComponent': 10, 'elk.spacing.nodeNode': 20 } }
           : name === 'dagre'
@@ -837,17 +860,18 @@ const CytoscapeNetwork = ({
   return (
     <Box position="relative" width="100%" height={typeof height === "number" ? `${height}px` : height}>
       {/* Performance Warning - shown at the top if needed */}
-      {shouldShowWarning && performanceTier.name !== 'optimal' && (
+      {(shouldShowWarning && performanceTier.name !== 'optimal') || (networkState.selectedLayout === 'cola' && nodeCount > 1000) ? (
         <Box position="absolute" top={2} left={2} right={2} zIndex={4} maxW="600px">
           <PerformanceWarning
             tier={performanceTier}
             nodeCount={nodeCount}
             edgeCount={edgeCount}
+            currentLayout={networkState.selectedLayout}
             onDismiss={dismissWarning}
             onApplyRecommendation={handleApplyRecommendation}
           />
         </Box>
-      )}
+      ) : null}
       
       <NetworkToolbar
         showControls={showControls}
@@ -861,10 +885,17 @@ const CytoscapeNetwork = ({
         onToggleStylePanel={() => {
           networkActions.setIsStylePanelOpen(!networkState.isStylePanelOpen)
           networkActions.setIsInfoPanelOpen(false)
+          setIsEdgeFilterOpen(false)
         }}
         onToggleInfoPanel={() => {
           networkActions.setIsInfoPanelOpen(!networkState.isInfoPanelOpen)
           networkActions.setIsStylePanelOpen(false)
+          setIsEdgeFilterOpen(false)
+        }}
+        onToggleEdgeFilter={() => {
+          setIsEdgeFilterOpen(!isEdgeFilterOpen)
+          networkActions.setIsStylePanelOpen(false)
+          networkActions.setIsInfoPanelOpen(false)
         }}
         onRunLayout={handleRunLayout}
         onResetView={handleResetView}
@@ -900,7 +931,63 @@ const CytoscapeNetwork = ({
         onClose={() => networkActions.setIsInfoPanelOpen(false)}
         networkStats={networkStats}
         nodeTypeColors={nodeTypeColors}
+        cy={cyRef.current}
       />
+      
+      {isEdgeFilterOpen && (
+        <Box
+          position="absolute"
+          top={10}
+          right={2}
+          zIndex={2}
+        >
+          <ComponentEdgeFilter
+            onApplyFilter={async (filter) => {
+              const cy = cyRef.current
+              if (!cy) return
+              
+              try {
+                const { filterComponentsByEdgeTypes } = await import('@/utils/cytoscapeUtils')
+                const matching = filterComponentsByEdgeTypes(cy, filter)
+                setFilteredComponents(matching)
+                setEdgeFilter(filter)
+                
+                // Highlight matching components
+                cy.batch(() => {
+                  cy.nodes().forEach((n) => {
+                    n.data('highlight', 0)
+                  })
+                  
+                  const { nidToCid } = computeComponents(cy)
+                  nidToCid.forEach((cid, nid) => {
+                    if (matching.has(cid)) {
+                      const node = cy.getElementById(nid)
+                      if (node && node.nonempty()) {
+                        node.data('highlight', 1)
+                      }
+                    }
+                  })
+                })
+              } catch (error) {
+                console.error('Failed to apply edge filter:', error)
+              }
+            }}
+            onClearFilter={() => {
+              setFilteredComponents(null)
+              setEdgeFilter(null)
+              
+              const cy = cyRef.current
+              if (cy) {
+                cy.batch(() => {
+                  cy.nodes().forEach((n) => {
+                    n.data('highlight', 0)
+                  })
+                })
+              }
+            }}
+          />
+        </Box>
+      )}
       
       <NetworkCore
         containerRef={containerRef}
@@ -997,6 +1084,7 @@ const CytoscapeNetwork = ({
           setSelectedForComparison: (next) => networkActions.setSelectedForComparison(new Set(next)),
           comparisonModalOpen: networkState.comparisonModalOpen,
           setComparisonModalOpen: networkActions.setComparisonModalOpen,
+          dataSource: networkState.dataSource,
           graphRef: cyRef,
           hoverRevertTimeoutRef,
           prevViewRef,

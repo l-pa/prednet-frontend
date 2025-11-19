@@ -16,11 +16,14 @@ export default function PerformanceWarning({
   tier,
   nodeCount,
   edgeCount,
+  currentLayout,
   onDismiss,
   onApplyRecommendation,
 }: PerformanceWarningProps) {
-  // Only show warning for large and extreme tiers
-  if (tier.name === 'optimal' || tier.name === 'moderate') {
+  // Show warning for large/extreme/massive tiers OR when cola is selected for networks >1000 nodes
+  const showColaWarning = currentLayout === 'cola' && nodeCount > 1000
+  
+  if (!showColaWarning && (tier.name === 'optimal' || tier.name === 'moderate')) {
     return null
   }
 
@@ -54,6 +57,15 @@ export default function PerformanceWarning({
           iconColor: 'red.600',
           darkIconColor: 'red.400',
         }
+      case 'massive':
+        return {
+          bg: 'purple.50',
+          darkBg: 'purple.900/20',
+          borderColor: 'purple.300',
+          darkBorderColor: 'purple.700',
+          iconColor: 'purple.600',
+          darkIconColor: 'purple.400',
+        }
       default:
         return {
           bg: 'gray.50',
@@ -70,6 +82,16 @@ export default function PerformanceWarning({
 
   // Get tier-specific recommendations
   const getRecommendations = (): string[] => {
+    // Special case: cola layout warning for large networks
+    if (showColaWarning) {
+      return [
+        "Cola layout is not recommended for networks with more than 1,000 nodes",
+        "Cola has O(n²) complexity and may take a very long time or freeze the browser",
+        "Switch to fcose or cose-bilkent for better performance with large networks",
+        "For fastest results, use grid layout instead",
+      ]
+    }
+    
     switch (tier.name) {
       case 'moderate':
         return [
@@ -86,10 +108,19 @@ export default function PerformanceWarning({
         ]
       case 'extreme':
         return [
-          "Network will be very slow - filtering is strongly recommended",
+          "Very large network detected (2,000+ nodes) - filtering is strongly recommended",
+          "Progressive rendering will be used to improve load times",
+          "Labels and edge arrows will be hidden by default for performance",
+          "Only grid layout is recommended - force-directed layouts will be extremely slow",
           "Filter by edge weight, view components separately, or focus on specific proteins",
-          "Use grid layout for best performance (force-directed layouts may freeze)",
-          "Layout computation may take 30+ seconds or freeze the browser",
+        ]
+      case 'massive':
+        return [
+          "Extremely large network detected (5,000+ nodes) - data filtering is essential",
+          "Only grid layout will be available for networks this size",
+          "All visual features will be simplified to maintain browser responsiveness",
+          "Progressive rendering and viewport culling will be enabled automatically",
+          "Strongly consider filtering to reduce network size below 2,000 nodes for better experience",
         ]
       default:
         return []
@@ -98,15 +129,21 @@ export default function PerformanceWarning({
 
   const recommendations = getRecommendations()
 
-  // Get warning title based on tier
+  // Get warning title based on tier or cola warning
   const getTitle = (): string => {
+    if (showColaWarning) {
+      return "Cola Layout Not Recommended"
+    }
+    
     switch (tier.name) {
       case 'moderate':
         return "Moderate Network Size"
       case 'large':
         return "Large Network Detected"
       case 'extreme':
-        return "Very Large Network"
+        return "Very Large Network (2,000+ nodes)"
+      case 'massive':
+        return "Extremely Large Network (5,000+ nodes)"
       default:
         return "Performance Notice"
     }
@@ -118,6 +155,16 @@ export default function PerformanceWarning({
       onApplyRecommendation({
         type: 'switch-layout',
         payload: { layoutName: 'grid' }
+      })
+    }
+  }
+  
+  // Handle switch to fcose (recommended alternative to cola for large networks)
+  const handleSwitchToFcose = () => {
+    if (onApplyRecommendation) {
+      onApplyRecommendation({
+        type: 'switch-layout',
+        payload: { layoutName: 'fcose' }
       })
     }
   }
@@ -222,7 +269,7 @@ export default function PerformanceWarning({
           </Box>
 
           {/* Action Buttons for Large Networks */}
-          {(tier.name === 'large' || tier.name === 'extreme') && onApplyRecommendation && (
+          {(tier.name === 'large' || tier.name === 'extreme' || tier.name === 'massive') && onApplyRecommendation && !showColaWarning && (
             <HStack gap={2} mt={2}>
               <Button
                 size="xs"
@@ -238,6 +285,45 @@ export default function PerformanceWarning({
                 <HStack gap={1}>
                   <FiZap aria-hidden="true" />
                   <span>Switch to Grid Layout</span>
+                </HStack>
+              </Button>
+            </HStack>
+          )}
+          
+          {/* Action Buttons for Cola Warning */}
+          {showColaWarning && onApplyRecommendation && (
+            <HStack gap={2} mt={2} flexWrap="wrap">
+              <Button
+                size="xs"
+                colorPalette="blue"
+                onClick={handleSwitchToFcose}
+                aria-label="Switch to fcose layout for better performance"
+                _focus={{
+                  outline: "2px solid",
+                  outlineColor: "blue.500",
+                  outlineOffset: "2px"
+                }}
+              >
+                <HStack gap={1}>
+                  <FiZap aria-hidden="true" />
+                  <span>Switch to Fcose</span>
+                </HStack>
+              </Button>
+              <Button
+                size="xs"
+                variant="outline"
+                colorPalette="blue"
+                onClick={handleSwitchToGrid}
+                aria-label="Switch to grid layout for fastest performance"
+                _focus={{
+                  outline: "2px solid",
+                  outlineColor: "blue.500",
+                  outlineOffset: "2px"
+                }}
+              >
+                <HStack gap={1}>
+                  <FiZap aria-hidden="true" />
+                  <span>Switch to Grid</span>
                 </HStack>
               </Button>
             </HStack>

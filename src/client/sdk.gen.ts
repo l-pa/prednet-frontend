@@ -3,7 +3,137 @@
 import type { CancelablePromise } from './core/CancelablePromise';
 import { OpenAPI } from './core/OpenAPI';
 import { request as __request } from './core/request';
-import type { ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, PrivateCreateUserData, PrivateCreateUserResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+import type { FavoritesReadFavoritesData, FavoritesReadFavoritesResponse, FavoritesCreateFavoriteData, FavoritesCreateFavoriteResponse, FavoritesReadFavoriteData, FavoritesReadFavoriteResponse, FavoritesUpdateFavoriteData, FavoritesUpdateFavoriteResponse, FavoritesDeleteFavoriteData, FavoritesDeleteFavoriteResponse, FavoritesFavoriteExistsData, FavoritesFavoriteExistsResponse, ItemsReadItemsData, ItemsReadItemsResponse, ItemsCreateItemData, ItemsCreateItemResponse, ItemsReadItemData, ItemsReadItemResponse, ItemsUpdateItemData, ItemsUpdateItemResponse, ItemsDeleteItemData, ItemsDeleteItemResponse, LoginLoginAccessTokenData, LoginLoginAccessTokenResponse, LoginTestTokenResponse, LoginRecoverPasswordData, LoginRecoverPasswordResponse, LoginResetPasswordData, LoginResetPasswordResponse, LoginRecoverPasswordHtmlContentData, LoginRecoverPasswordHtmlContentResponse, NetworksGetNetworksResponse, NetworksGetNetworkFilesData, NetworksGetNetworkFilesResponse, NetworksGetSgdDetailsData, NetworksGetSgdDetailsResponse, NetworksGetGdfFileData, NetworksGetGdfFileResponse, NetworksComputeSpringLayoutData, NetworksComputeSpringLayoutResponse, NetworksGetComponentProteinsByNodeData, NetworksGetComponentProteinsByNodeResponse, PrivateCreateUserData, PrivateCreateUserResponse, ProteinsGetGoHierarchyData, ProteinsGetGoHierarchyResponse, ProteinsGetComponentsMembershipData, ProteinsGetComponentsMembershipResponse, ProteinsGetComponentSubgraphData, ProteinsGetComponentSubgraphResponse, ProteinsSearchComponentsByIdData, ProteinsSearchComponentsByIdResponse, ProteinsGetProteinFeaturesData, ProteinsGetProteinFeaturesResponse, ProteinsGetProteinsData, ProteinsGetProteinsResponse, UsersReadUsersData, UsersReadUsersResponse, UsersCreateUserData, UsersCreateUserResponse, UsersReadUserMeResponse, UsersDeleteUserMeResponse, UsersUpdateUserMeData, UsersUpdateUserMeResponse, UsersUpdatePasswordMeData, UsersUpdatePasswordMeResponse, UsersRegisterUserData, UsersRegisterUserResponse, UsersReadUserByIdData, UsersReadUserByIdResponse, UsersUpdateUserData, UsersUpdateUserResponse, UsersDeleteUserData, UsersDeleteUserResponse, UtilsTestEmailData, UtilsTestEmailResponse, UtilsHealthCheckResponse } from './types.gen';
+
+export class FavoritesService {
+    /**
+     * Read Favorites
+     * @param data The data for the request.
+     * @param data.skip
+     * @param data.limit
+     * @returns FavoriteComponentsPublic Successful Response
+     * @throws ApiError
+     */
+    public static readFavorites(data: FavoritesReadFavoritesData = {}): CancelablePromise<FavoritesReadFavoritesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/favorites/',
+            query: {
+                skip: data.skip,
+                limit: data.limit
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Create Favorite
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns FavoriteComponentPublic Successful Response
+     * @throws ApiError
+     */
+    public static createFavorite(data: FavoritesCreateFavoriteData): CancelablePromise<FavoritesCreateFavoriteResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/favorites/',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Read Favorite
+     * @param data The data for the request.
+     * @param data.id
+     * @returns FavoriteComponentPublic Successful Response
+     * @throws ApiError
+     */
+    public static readFavorite(data: FavoritesReadFavoriteData): CancelablePromise<FavoritesReadFavoriteResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/favorites/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Update Favorite
+     * @param data The data for the request.
+     * @param data.id
+     * @param data.requestBody
+     * @returns FavoriteComponentPublic Successful Response
+     * @throws ApiError
+     */
+    public static updateFavorite(data: FavoritesUpdateFavoriteData): CancelablePromise<FavoritesUpdateFavoriteResponse> {
+        return __request(OpenAPI, {
+            method: 'PUT',
+            url: '/api/v1/favorites/{id}',
+            path: {
+                id: data.id
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Delete Favorite
+     * @param data The data for the request.
+     * @param data.id
+     * @returns Message Successful Response
+     * @throws ApiError
+     */
+    public static deleteFavorite(data: FavoritesDeleteFavoriteData): CancelablePromise<FavoritesDeleteFavoriteResponse> {
+        return __request(OpenAPI, {
+            method: 'DELETE',
+            url: '/api/v1/favorites/{id}',
+            path: {
+                id: data.id
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Favorite Exists
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.filename
+     * @param data.componentId
+     * @returns FavoriteExists Successful Response
+     * @throws ApiError
+     */
+    public static favoriteExists(data: FavoritesFavoriteExistsData): CancelablePromise<FavoritesFavoriteExistsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/favorites/exists',
+            query: {
+                network_name: data.networkName,
+                filename: data.filename,
+                component_id: data.componentId
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
 
 export class ItemsService {
     /**
@@ -213,6 +343,127 @@ export class LoginService {
     }
 }
 
+export class NetworksService {
+    /**
+     * Get Networks
+     * Get list of available networks from the data folder.
+     * Returns network names and GDF file counts for each network.
+     * @returns NetworkInfo Successful Response
+     * @throws ApiError
+     */
+    public static getNetworks(): CancelablePromise<NetworksGetNetworksResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/networks/'
+        });
+    }
+    
+    /**
+     * Get Network Files
+     * Get list of GDF files for a specific network.
+     * @param data The data for the request.
+     * @param data.networkName
+     * @returns string Successful Response
+     * @throws ApiError
+     */
+    public static getNetworkFiles(data: NetworksGetNetworkFilesData): CancelablePromise<NetworksGetNetworkFilesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/networks/{network_name}/files',
+            path: {
+                network_name: data.networkName
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Sgd Details
+     * Return basic SGD mapping details for the provided tokens.
+     * Maps systematic token to gene name where available using SGD_features.tab.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns SGDDetailsItem Successful Response
+     * @throws ApiError
+     */
+    public static getSgdDetails(data: NetworksGetSgdDetailsData): CancelablePromise<NetworksGetSgdDetailsResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/networks/sgd/details',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Gdf File
+     * Read a GDF file and convert it to Cytoscape.js format.
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.filename
+     * @returns CytoscapeGraph Successful Response
+     * @throws ApiError
+     */
+    public static getGdfFile(data: NetworksGetGdfFileData): CancelablePromise<NetworksGetGdfFileResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/networks/{network_name}/gdf/{filename}',
+            path: {
+                network_name: data.networkName,
+                filename: data.filename
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Compute Spring Layout
+     * Compute a force-directed (spring) layout on the backend using NetworkX.
+     * Returns a dict mapping node id to {x, y} positions.
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns LayoutResponse Successful Response
+     * @throws ApiError
+     */
+    public static computeSpringLayout(data: NetworksComputeSpringLayoutData): CancelablePromise<NetworksComputeSpringLayoutResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/networks/layout/spring',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Component Proteins By Node
+     * @param data The data for the request.
+     * @param data.requestBody
+     * @returns ByNodeResponse Successful Response
+     * @throws ApiError
+     */
+    public static getComponentProteinsByNode(data: NetworksGetComponentProteinsByNodeData): CancelablePromise<NetworksGetComponentProteinsByNodeResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/networks/components/by-node',
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
 export class PrivateService {
     /**
      * Create User
@@ -228,6 +479,210 @@ export class PrivateService {
             url: '/api/v1/private/users/',
             body: data.requestBody,
             mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+}
+
+export class ProteinsService {
+    /**
+     * Get Go Hierarchy
+     * Fetch GO term hierarchy from QuickGO API.
+     *
+     * Returns parent-child relationships and complete hierarchy information
+     * for the specified GO terms. Optionally includes all ancestor terms
+     * up to the root of the ontology.
+     *
+     * Args:
+     * go_ids: Comma-separated GO IDs
+     * include_ancestors: Whether to fetch all ancestor terms
+     *
+     * Returns:
+     * GOHierarchyResponse with hierarchy information
+     * @param data The data for the request.
+     * @param data.goIds Comma-separated list of GO IDs (e.g., GO:0006936,GO:0003012)
+     * @param data.includeAncestors Include all ancestor terms in the hierarchy
+     * @returns GOHierarchyResponse Successful Response
+     * @throws ApiError
+     */
+    public static getGoHierarchy(data: ProteinsGetGoHierarchyData): CancelablePromise<ProteinsGetGoHierarchyResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/proteins/go-hierarchy',
+            query: {
+                go_ids: data.goIds,
+                include_ancestors: data.includeAncestors
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Components Membership
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.requestBody
+     * @returns ComponentsResponse Successful Response
+     * @throws ApiError
+     */
+    public static getComponentsMembership(data: ProteinsGetComponentsMembershipData): CancelablePromise<ProteinsGetComponentsMembershipResponse> {
+        return __request(OpenAPI, {
+            method: 'POST',
+            url: '/api/v1/proteins/{network_name}/components',
+            path: {
+                network_name: data.networkName
+            },
+            body: data.requestBody,
+            mediaType: 'application/json',
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Component Subgraph
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.filename
+     * @param data.componentId
+     * @param data.nameMode
+     * @returns SubgraphGraph Successful Response
+     * @throws ApiError
+     */
+    public static getComponentSubgraph(data: ProteinsGetComponentSubgraphData): CancelablePromise<ProteinsGetComponentSubgraphResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/proteins/{network_name}/components/{filename}/{component_id}',
+            path: {
+                network_name: data.networkName,
+                filename: data.filename,
+                component_id: data.componentId
+            },
+            query: {
+                name_mode: data.nameMode
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Search Components By Id
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.page
+     * @param data.size
+     * @param data.q Search by component ID (exact number or digits)
+     * @param data.file Optional GDF filename to filter
+     * @param data.nameMode
+     * @returns PagedComponents Successful Response
+     * @throws ApiError
+     */
+    public static searchComponentsById(data: ProteinsSearchComponentsByIdData): CancelablePromise<ProteinsSearchComponentsByIdResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/proteins/{network_name}/components/search',
+            path: {
+                network_name: data.networkName
+            },
+            query: {
+                page: data.page,
+                size: data.size,
+                q: data.q,
+                file: data.file,
+                name_mode: data.nameMode
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Protein Features
+     * Fetch protein sequence features from UniProt or STRING-DB for multiple proteins.
+     *
+     * Returns sequence length and feature annotations (domains, regions, motifs, etc.)
+     * for each requested protein. Handles partial failures gracefully by returning
+     * error messages for failed proteins while providing data for successful ones.
+     *
+     * Args:
+     * network_name: Network name (for validation/context)
+     * proteins: Comma-separated protein identifiers
+     * name_mode: Whether to use systematic or gene names
+     * organism_id: NCBI taxonomy ID for organism filtering
+     * source: Data source to use (uniprot or stringdb)
+     *
+     * Returns:
+     * ProteinFeaturesResponse with data for each protein
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.proteins Comma-separated list of protein identifiers
+     * @param data.nameMode
+     * @param data.organismId NCBI taxonomy ID (default: S. cerevisiae)
+     * @param data.source Data source: uniprot or stringdb
+     * @returns ProteinFeaturesResponse Successful Response
+     * @throws ApiError
+     */
+    public static getProteinFeatures(data: ProteinsGetProteinFeaturesData): CancelablePromise<ProteinsGetProteinFeaturesResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/proteins/{network_name}/features',
+            path: {
+                network_name: data.networkName
+            },
+            query: {
+                proteins: data.proteins,
+                name_mode: data.nameMode,
+                organism_id: data.organismId,
+                source: data.source
+            },
+            errors: {
+                422: 'Validation Error'
+            }
+        });
+    }
+    
+    /**
+     * Get Proteins
+     * Aggregate unique proteins across all GDFs in a network.
+     *
+     * - Extract tokens from the node 'label' field (split by whitespace). If no 'label'
+     * field exists, fall back to 'name' or the first column.
+     * - Return a paginated list of unique proteins with the list of GDF files they appear in.
+     * - Optionally filter by node types (e.g., prediction, matched_prediction, reference, matched_reference).
+     * @param data The data for the request.
+     * @param data.networkName
+     * @param data.page
+     * @param data.size
+     * @param data.q Space-separated protein names to filter by
+     * @param data.selected Space-separated selected proteins; return only proteins that co-occur in same components across files
+     * @param data.nameMode
+     * @param data.types Comma-separated node types to filter by (e.g., 'prediction,reference')
+     * @returns PagedProteins Successful Response
+     * @throws ApiError
+     */
+    public static getProteins(data: ProteinsGetProteinsData): CancelablePromise<ProteinsGetProteinsResponse> {
+        return __request(OpenAPI, {
+            method: 'GET',
+            url: '/api/v1/proteins/{network_name}',
+            path: {
+                network_name: data.networkName
+            },
+            query: {
+                page: data.page,
+                size: data.size,
+                q: data.q,
+                selected: data.selected,
+                name_mode: data.nameMode,
+                types: data.types
+            },
             errors: {
                 422: 'Validation Error'
             }

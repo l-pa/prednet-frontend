@@ -1,11 +1,13 @@
 import { Box, HStack, IconButton, Stack, Text, Tooltip, VStack } from "@chakra-ui/react"
 import { LuX, LuInfo } from "react-icons/lu"
 import { useState } from "react"
-import type { ProteinFeatureData, ProteinFeature } from "./types"
+import type { ProteinFeatureData } from "./types"
 
 interface ProteinFeatureVisualizationProps {
   proteinData: ProteinFeatureData[]
   onRemoveProtein: (protein: string) => void
+  nodeProteins?: string[] // Proteins from the selected node (for grouping)
+  proteinToNodeMap?: Map<string, string> // Maps protein ID to node ID for grouping by node
 }
 
 // Feature color palette (must match FeatureLegend)
@@ -56,8 +58,11 @@ function getFeatureExplanation(type: string): { simple: string; example: string 
 export default function ProteinFeatureVisualization({
   proteinData,
   onRemoveProtein,
+  nodeProteins = [],
+  proteinToNodeMap,
 }: ProteinFeatureVisualizationProps) {
   const [hoveredFeature, setHoveredFeature] = useState<string | null>(null)
+  const [isCollapsed, setIsCollapsed] = useState(false)
   
   // Filter out proteins with errors for the main visualization
   const validProteins = proteinData.filter(p => !p.error && p.sequence_length)
@@ -87,333 +92,601 @@ export default function ProteinFeatureVisualization({
   
   return (
     <Box
-      minW="600px"
-      maxH="500px"
-      overflowY="auto"
-      overflowX="auto"
-      p={2}
-      rounded="md"
-      bg="gray.50"
-      _dark={{ bg: "gray.800" }}
+      borderWidth="1px"
+      borderRadius="md"
+      borderColor="gray.200"
+      _dark={{ borderColor: "gray.700" }}
+      mt={4}
       role="region"
-      aria-label="Protein feature comparison visualization"
+      aria-labelledby="protein-sequences-panel-title"
+      aria-label="Protein sequence features comparison panel"
     >
-      <Stack gap={4}>
-        {/* Protein headers with remove buttons */}
-        <Box
-          p={3}
-          borderWidth="1px"
-          rounded="md"
-          bg="white"
-          _dark={{ bg: "gray.700" }}
-        >
-          <VStack align="stretch" gap={2}>
-            {validProteins.map((protein) => (
-              <HStack key={protein.protein} justify="space-between">
-                <HStack gap={2}>
-                  <Text fontWeight="semibold" fontSize="sm">
-                    {protein.protein}
-                  </Text>
-                  <Tooltip.Root openDelay={300}>
-                    <Tooltip.Trigger asChild>
-                      <Text fontSize="xs" opacity={0.7} cursor="help">
-                        ({protein.sequence_length} aa)
-                      </Text>
-                    </Tooltip.Trigger>
-                    <Tooltip.Positioner>
-                      <Tooltip.Content>
-                        <Tooltip.Arrow />
-                        <VStack align="start" gap={1} fontSize="xs">
-                          <Text fontWeight="semibold">Protein Length</Text>
-                          <Text>
-                            This protein is {protein.sequence_length} amino acids long.
-                          </Text>
-                          <Text opacity={0.8} fontStyle="italic">
-                            Amino acids (aa) are the building blocks of proteins - like letters in a word.
-                          </Text>
-                        </VStack>
-                      </Tooltip.Content>
-                    </Tooltip.Positioner>
-                  </Tooltip.Root>
-                </HStack>
-                <Tooltip.Root openDelay={200}>
-                  <Tooltip.Trigger asChild>
-                    <IconButton
-                      size="xs"
-                      variant="ghost"
-                      onClick={() => onRemoveProtein(protein.protein)}
-                      aria-label={`Remove ${protein.protein} from comparison`}
-                    >
-                      <LuX />
-                    </IconButton>
-                  </Tooltip.Trigger>
-                  <Tooltip.Positioner>
-                    <Tooltip.Content>
-                      <Tooltip.Arrow />
-                      <Text fontSize="xs">Remove {protein.protein}</Text>
-                    </Tooltip.Content>
-                  </Tooltip.Positioner>
-                </Tooltip.Root>
-              </HStack>
-            ))}
-          </VStack>
-        </Box>
+      {/* Panel Header */}
+      <Box
+        as="button"
+        w="full"
+        p={3}
+        display="flex"
+        alignItems="center"
+        justifyContent="space-between"
+        cursor="pointer"
+        bg="gray.50"
+        _dark={{ bg: "gray.800" }}
+        borderTopRadius="md"
+        _hover={{
+          bg: "gray.100",
+          _dark: { bg: "gray.750" },
+        }}
+        onClick={() => setIsCollapsed(!isCollapsed)}
+        aria-expanded={!isCollapsed}
+        aria-controls="protein-sequences-panel-content"
+        aria-label={`${isCollapsed ? "Expand" : "Collapse"} protein sequences panel`}
+      >
+        <Stack direction="row" align="center" gap={2}>
+          <Text
+            id="protein-sequences-panel-title"
+            fontSize="md"
+            fontWeight="semibold"
+          >
+            Protein Sequences
+          </Text>
+          {validProteins.length > 0 && (
+            <Text fontSize="sm" opacity={0.7}>
+              ({validProteins.length} protein{validProteins.length !== 1 ? "s" : ""})
+            </Text>
+          )}
+        </Stack>
+        <Text fontSize="sm" opacity={0.7}>
+          {isCollapsed ? "▶" : "▼"}
+        </Text>
+      </Box>
 
-        {/* Feature type rows - each feature type gets its own section */}
-        {sortedFeatureTypes.map((featureType) => {
-          const explanation = getFeatureExplanation(featureType)
-          
-          return (
-            <Box
-              key={featureType}
-              p={3}
-              borderWidth="1px"
-              rounded="md"
-              bg="white"
-              _dark={{ bg: "gray.700" }}
-              role="article"
-              aria-label={`${featureType} features comparison`}
-            >
-              <HStack gap={2} mb={3}>
-                <Text fontWeight="semibold" fontSize="sm" color={getFeatureColor(featureType)}>
-                  {featureType}
-                </Text>
-                <Tooltip.Root openDelay={200}>
-                  <Tooltip.Trigger asChild>
-                    <Box
-                      as="button"
-                      color="gray.500"
-                      _hover={{ color: "gray.700" }}
-                      _dark={{ color: "gray.400", _hover: { color: "gray.200" } }}
-                      cursor="help"
-                      display="inline-flex"
-                      alignItems="center"
-                      aria-label={`Learn about ${featureType}`}
-                    >
-                      <LuInfo size={14} />
-                    </Box>
-                  </Tooltip.Trigger>
-                  <Tooltip.Positioner>
-                    <Tooltip.Content maxW="320px">
-                      <Tooltip.Arrow />
-                      <VStack align="start" gap={2} fontSize="xs">
-                        <Text fontWeight="semibold" color={getFeatureColor(featureType)}>
-                          What is a {featureType}?
-                        </Text>
-                        <Text>{explanation.simple}</Text>
-                        <Text opacity={0.8} fontStyle="italic">
-                          {explanation.example}
-                        </Text>
-                      </VStack>
-                    </Tooltip.Content>
-                  </Tooltip.Positioner>
-                </Tooltip.Root>
-              </HStack>
-            
-            <VStack align="stretch" gap={2}>
-              {validProteins.map((protein) => {
-                // Get features of this type for this protein
-                const featuresOfType = protein.features.filter(f => f.type === featureType)
-                const sequenceLength = protein.sequence_length!
-                
-                return (
-                  <Box key={protein.protein} position="relative">
-                    <HStack gap={2} mb={1}>
-                      <Text fontSize="xs" opacity={0.7} minW="80px">
-                        {protein.protein}
-                      </Text>
-                    </HStack>
+      {/* Panel Content */}
+      {!isCollapsed && (
+        <Box 
+          id="protein-sequences-panel-content" 
+          p={4}
+          maxH="500px"
+          overflowY="auto"
+          overflowX="auto"
+        >
+          <Stack gap={4}>
+              {/* Protein headers with remove buttons */}
+              <Box
+                p={3}
+                borderWidth="1px"
+                rounded="md"
+                bg="white"
+                _dark={{ bg: "gray.700" }}
+              >
+                <VStack align="stretch" gap={3}>
+                  {/* Group proteins by individual nodes if map is provided */}
+                  {proteinToNodeMap && (() => {
+                    // Group proteins by their node
+                    const nodeGroups = new Map<string, ProteinFeatureData[]>()
+                    validProteins.forEach(protein => {
+                      const nodeId = proteinToNodeMap.get(protein.protein) || 'unknown'
+                      if (!nodeGroups.has(nodeId)) {
+                        nodeGroups.set(nodeId, [])
+                      }
+                      nodeGroups.get(nodeId)!.push(protein)
+                    })
                     
-                    {featuresOfType.length === 0 ? (
-                      <Box
-                        h="24px"
-                        bg="gray.100"
-                        _dark={{ bg: "gray.600" }}
-                        rounded="sm"
-                        display="flex"
-                        alignItems="center"
-                        justifyContent="center"
-                      >
-                        <Text fontSize="2xs" opacity={0.5}>
-                          No {featureType} features
-                        </Text>
-                      </Box>
-                    ) : (
-                      <Box position="relative" h="24px">
-                        <svg
-                          width="100%"
-                          height="24"
-                          viewBox="0 0 1000 24"
-                          preserveAspectRatio="none"
-                          style={{ display: "block" }}
-                        >
-                          {/* Background bar showing full sequence length */}
-                          <rect
-                            x="0"
-                            y="2"
-                            width={(sequenceLength / maxLength) * 1000}
-                            height="20"
-                            fill="currentColor"
-                            opacity="0.1"
-                            rx="2"
-                          />
-                          
-                          {/* Render features */}
-                          {featuresOfType.map((feature, idx) => {
-                            const xPos = (feature.start / maxLength) * 1000
-                            const width = ((feature.end - feature.start + 1) / maxLength) * 1000
-                            const color = getFeatureColor(feature.type)
-                            const key = `${protein.protein}-${feature.type}-${idx}`
-                            
-                            return (
-                              <g
-                                key={key}
-                                onMouseEnter={() => setHoveredFeature(key)}
-                                onMouseLeave={() => setHoveredFeature(null)}
-                              >
-                                <rect
-                                  x={xPos}
-                                  y="2"
-                                  width={width}
-                                  height="20"
-                                  fill={color}
-                                  rx="2"
-                                  style={{ cursor: "pointer" }}
-                                />
-                                {width > 80 && (
-                                  <text
-                                    x={xPos + width / 2}
-                                    y="16"
-                                    textAnchor="middle"
-                                    fill="white"
-                                    fontSize="9"
-                                    fontWeight="500"
-                                    style={{ pointerEvents: "none" }}
-                                  >
-                                    {feature.description.length > 15
-                                      ? `${feature.description.substring(0, 12)}...`
-                                      : feature.description}
-                                  </text>
-                                )}
-                              </g>
-                            )
-                          })}
-                        </svg>
-                        
-                        {/* Tooltips */}
-                        {featuresOfType.map((feature, idx) => {
-                          const xPos = (feature.start / maxLength) * 100
-                          const width = ((feature.end - feature.start + 1) / maxLength) * 100
-                          const key = `${protein.protein}-${feature.type}-${idx}`
-                          const isHovered = hoveredFeature === key
-                          
-                          return (
-                            <Tooltip.Root
-                              key={`tooltip-${key}`}
-                              open={isHovered}
-                              openDelay={100}
-                              closeDelay={100}
-                            >
+                    // Node colors for visual distinction
+                    const nodeColors = [
+                      { text: "blue.600", textDark: "blue.300", bg: "blue.50", bgDark: "blue.900" },
+                      { text: "purple.600", textDark: "purple.300", bg: "purple.50", bgDark: "purple.900" },
+                      { text: "green.600", textDark: "green.300", bg: "green.50", bgDark: "green.900" },
+                      { text: "orange.600", textDark: "orange.300", bg: "orange.50", bgDark: "orange.900" },
+                      { text: "pink.600", textDark: "pink.300", bg: "pink.50", bgDark: "pink.900" },
+                      { text: "teal.600", textDark: "teal.300", bg: "teal.50", bgDark: "teal.900" },
+                    ]
+                    
+                    return Array.from(nodeGroups.entries()).map(([nodeId, proteins], groupIndex) => {
+                      const colorScheme = nodeColors[groupIndex % nodeColors.length]
+                      return (
+                        <Box key={nodeId}>
+                          {groupIndex > 0 && <Box borderTopWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }} my={2} />}
+                          <Box 
+                            p={2} 
+                            bg={colorScheme.bg} 
+                            _dark={{ bg: colorScheme.bgDark }} 
+                            rounded="md" 
+                            mb={2}
+                          >
+                            <Text fontSize="xs" fontWeight="semibold" opacity={0.8} textTransform="uppercase">
+                              Node: {nodeId} ({proteins.length} protein{proteins.length !== 1 ? 's' : ''})
+                            </Text>
+                          </Box>
+                          {proteins.map((protein) => (
+                            <HStack key={protein.protein} justify="space-between" ml={2}>
+                              <HStack gap={2}>
+                                <Text fontWeight="semibold" fontSize="sm" color={colorScheme.text} _dark={{ color: colorScheme.textDark }}>
+                                  {protein.protein}
+                                </Text>
+                        <Tooltip.Root openDelay={300}>
+                          <Tooltip.Trigger asChild>
+                            <Text fontSize="xs" opacity={0.7} cursor="help">
+                              ({protein.sequence_length} aa)
+                            </Text>
+                          </Tooltip.Trigger>
+                          <Tooltip.Positioner>
+                            <Tooltip.Content>
+                              <Tooltip.Arrow />
+                              <VStack align="start" gap={1} fontSize="xs">
+                                <Text fontWeight="semibold">Protein Length</Text>
+                                <Text>
+                                  This protein is {protein.sequence_length} amino acids long.
+                                </Text>
+                                <Text opacity={0.8} fontStyle="italic">
+                                  Amino acids (aa) are the building blocks of proteins - like letters in a word.
+                                </Text>
+                              </VStack>
+                            </Tooltip.Content>
+                          </Tooltip.Positioner>
+                        </Tooltip.Root>
+                      </HStack>
+                      <Tooltip.Root openDelay={200}>
+                        <Tooltip.Trigger asChild>
+                          <IconButton
+                            size="xs"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onRemoveProtein(protein.protein)
+                            }}
+                            aria-label={`Remove ${protein.protein} from comparison`}
+                          >
+                            <LuX />
+                          </IconButton>
+                        </Tooltip.Trigger>
+                        <Tooltip.Positioner>
+                          <Tooltip.Content>
+                            <Tooltip.Arrow />
+                            <Text fontSize="xs">Remove {protein.protein}</Text>
+                          </Tooltip.Content>
+                        </Tooltip.Positioner>
+                      </Tooltip.Root>
+                            </HStack>
+                          ))}
+                        </Box>
+                      )
+                    })
+                  })()}
+                  
+                  {/* Fallback: Group by selected node vs rest (when no node map) */}
+                  {!proteinToNodeMap && nodeProteins.length > 0 && validProteins.some(p => nodeProteins.includes(p.protein)) && (
+                    <>
+                      <Text fontSize="xs" fontWeight="semibold" opacity={0.7} textTransform="uppercase">
+                        From Selected Node
+                      </Text>
+                      {validProteins.filter(p => nodeProteins.includes(p.protein)).map((protein) => (
+                        <HStack key={protein.protein} justify="space-between">
+                          <HStack gap={2}>
+                            <Text fontWeight="semibold" fontSize="sm" color="blue.600" _dark={{ color: "blue.300" }}>
+                              {protein.protein}
+                            </Text>
+                            <Tooltip.Root openDelay={300}>
                               <Tooltip.Trigger asChild>
-                                <Box
-                                  position="absolute"
-                                  left={`${xPos}%`}
-                                  top="2px"
-                                  width={`${width}%`}
-                                  height="20px"
-                                  style={{ pointerEvents: "none" }}
-                                />
+                                <Text fontSize="xs" opacity={0.7} cursor="help">
+                                  ({protein.sequence_length} aa)
+                                </Text>
                               </Tooltip.Trigger>
                               <Tooltip.Positioner>
                                 <Tooltip.Content>
                                   <Tooltip.Arrow />
-                                  <VStack align="start" gap={0.5} fontSize="xs">
-                                    <Text fontWeight="semibold">
-                                      {feature.description}
+                                  <VStack align="start" gap={1} fontSize="xs">
+                                    <Text fontWeight="semibold">Protein Length</Text>
+                                    <Text>
+                                      This protein is {protein.sequence_length} amino acids long.
                                     </Text>
-                                    <Text opacity={0.9}>
-                                      Position: {feature.start}-{feature.end}
-                                    </Text>
-                                    <Text opacity={0.9}>
-                                      Length: {feature.end - feature.start + 1} aa
+                                    <Text opacity={0.8} fontStyle="italic">
+                                      Amino acids (aa) are the building blocks of proteins - like letters in a word.
                                     </Text>
                                   </VStack>
                                 </Tooltip.Content>
                               </Tooltip.Positioner>
                             </Tooltip.Root>
-                          )
-                        })}
-                      </Box>
-                    )}
-                  </Box>
-                )
-              })}
-            </VStack>
-          </Box>
-        )})}
-        
-        {/* Render proteins without sequence data */}
-        {noDataProteins.map((protein) => (
-          <Box
-            key={protein.protein}
-            p={3}
-            borderWidth="1px"
-            borderColor="yellow.300"
-            rounded="md"
-            bg="yellow.50"
-            _dark={{ bg: "yellow.900", borderColor: "yellow.700" }}
-            role="alert"
-          >
-            <HStack justify="space-between" mb={1}>
-              <Text fontWeight="semibold" fontSize="sm">
-                {protein.protein}
-              </Text>
-              <IconButton
-                size="xs"
-                variant="ghost"
-                onClick={() => onRemoveProtein(protein.protein)}
-                aria-label={`Remove ${protein.protein}`}
+                          </HStack>
+                          <Tooltip.Root openDelay={200}>
+                            <Tooltip.Trigger asChild>
+                              <IconButton
+                                size="xs"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onRemoveProtein(protein.protein)
+                                }}
+                                aria-label={`Remove ${protein.protein} from comparison`}
+                              >
+                                <LuX />
+                              </IconButton>
+                            </Tooltip.Trigger>
+                            <Tooltip.Positioner>
+                              <Tooltip.Content>
+                                <Tooltip.Arrow />
+                                <Text fontSize="xs">Remove {protein.protein}</Text>
+                              </Tooltip.Content>
+                            </Tooltip.Positioner>
+                          </Tooltip.Root>
+                        </HStack>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* Component proteins (not in node) */}
+                  {!proteinToNodeMap && nodeProteins.length > 0 && validProteins.some(p => !nodeProteins.includes(p.protein)) && (
+                    <>
+                      <Box borderTopWidth="1px" borderColor="gray.200" _dark={{ borderColor: "gray.600" }} pt={2} mt={1} />
+                      <Text fontSize="xs" fontWeight="semibold" opacity={0.7} textTransform="uppercase">
+                        From Rest of Component
+                      </Text>
+                      {validProteins.filter(p => !nodeProteins.includes(p.protein)).map((protein) => (
+                        <HStack key={protein.protein} justify="space-between">
+                          <HStack gap={2}>
+                            <Text fontWeight="semibold" fontSize="sm" color="purple.600" _dark={{ color: "purple.300" }}>
+                              {protein.protein}
+                            </Text>
+                            <Tooltip.Root openDelay={300}>
+                              <Tooltip.Trigger asChild>
+                                <Text fontSize="xs" opacity={0.7} cursor="help">
+                                  ({protein.sequence_length} aa)
+                                </Text>
+                              </Tooltip.Trigger>
+                              <Tooltip.Positioner>
+                                <Tooltip.Content>
+                                  <Tooltip.Arrow />
+                                  <VStack align="start" gap={1} fontSize="xs">
+                                    <Text fontWeight="semibold">Protein Length</Text>
+                                    <Text>
+                                      This protein is {protein.sequence_length} amino acids long.
+                                    </Text>
+                                    <Text opacity={0.8} fontStyle="italic">
+                                      Amino acids (aa) are the building blocks of proteins - like letters in a word.
+                                    </Text>
+                                  </VStack>
+                                </Tooltip.Content>
+                              </Tooltip.Positioner>
+                            </Tooltip.Root>
+                          </HStack>
+                          <Tooltip.Root openDelay={200}>
+                            <Tooltip.Trigger asChild>
+                              <IconButton
+                                size="xs"
+                                variant="ghost"
+                                onClick={(e) => {
+                                  e.stopPropagation()
+                                  onRemoveProtein(protein.protein)
+                                }}
+                                aria-label={`Remove ${protein.protein} from comparison`}
+                              >
+                                <LuX />
+                              </IconButton>
+                            </Tooltip.Trigger>
+                            <Tooltip.Positioner>
+                              <Tooltip.Content>
+                                <Tooltip.Arrow />
+                                <Text fontSize="xs">Remove {protein.protein}</Text>
+                              </Tooltip.Content>
+                            </Tooltip.Positioner>
+                          </Tooltip.Root>
+                        </HStack>
+                      ))}
+                    </>
+                  )}
+                  
+                  {/* No grouping - show all proteins */}
+                  {!proteinToNodeMap && nodeProteins.length === 0 && validProteins.map((protein) => (
+                    <HStack key={protein.protein} justify="space-between">
+                      <HStack gap={2}>
+                        <Text fontWeight="semibold" fontSize="sm">
+                          {protein.protein}
+                        </Text>
+                        <Tooltip.Root openDelay={300}>
+                          <Tooltip.Trigger asChild>
+                            <Text fontSize="xs" opacity={0.7} cursor="help">
+                              ({protein.sequence_length} aa)
+                            </Text>
+                          </Tooltip.Trigger>
+                          <Tooltip.Positioner>
+                            <Tooltip.Content>
+                              <Tooltip.Arrow />
+                              <VStack align="start" gap={1} fontSize="xs">
+                                <Text fontWeight="semibold">Protein Length</Text>
+                                <Text>
+                                  This protein is {protein.sequence_length} amino acids long.
+                                </Text>
+                                <Text opacity={0.8} fontStyle="italic">
+                                  Amino acids (aa) are the building blocks of proteins - like letters in a word.
+                                </Text>
+                              </VStack>
+                            </Tooltip.Content>
+                          </Tooltip.Positioner>
+                        </Tooltip.Root>
+                      </HStack>
+                      <Tooltip.Root openDelay={200}>
+                        <Tooltip.Trigger asChild>
+                          <IconButton
+                            size="xs"
+                            variant="ghost"
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              onRemoveProtein(protein.protein)
+                            }}
+                            aria-label={`Remove ${protein.protein} from comparison`}
+                          >
+                            <LuX />
+                          </IconButton>
+                        </Tooltip.Trigger>
+                        <Tooltip.Positioner>
+                          <Tooltip.Content>
+                            <Tooltip.Arrow />
+                            <Text fontSize="xs">Remove {protein.protein}</Text>
+                          </Tooltip.Content>
+                        </Tooltip.Positioner>
+                      </Tooltip.Root>
+                    </HStack>
+                  ))}
+                </VStack>
+              </Box>
+
+              {/* Feature type rows - each feature type gets its own section */}
+              {sortedFeatureTypes.map((featureType) => {
+                const explanation = getFeatureExplanation(featureType)
+                
+                return (
+                  <Box
+                    key={featureType}
+                    p={3}
+                    borderWidth="1px"
+                    rounded="md"
+                    bg="white"
+                    _dark={{ bg: "gray.700" }}
+                    role="article"
+                    aria-label={`${featureType} features comparison`}
+                  >
+                    <HStack gap={2} mb={3}>
+                      <Text fontWeight="semibold" fontSize="sm" color={getFeatureColor(featureType)}>
+                        {featureType}
+                      </Text>
+                      <Tooltip.Root openDelay={200}>
+                        <Tooltip.Trigger asChild>
+                          <Box
+                            as="button"
+                            color="gray.500"
+                            _hover={{ color: "gray.700" }}
+                            _dark={{ color: "gray.400", _hover: { color: "gray.200" } }}
+                            cursor="help"
+                            display="inline-flex"
+                            alignItems="center"
+                            aria-label={`Learn about ${featureType}`}
+                          >
+                            <LuInfo size={14} />
+                          </Box>
+                        </Tooltip.Trigger>
+                        <Tooltip.Positioner>
+                          <Tooltip.Content maxW="320px">
+                            <Tooltip.Arrow />
+                            <VStack align="start" gap={2} fontSize="xs">
+                              <Text fontWeight="semibold" color={getFeatureColor(featureType)}>
+                                What is a {featureType}?
+                              </Text>
+                              <Text>{explanation.simple}</Text>
+                              <Text opacity={0.8} fontStyle="italic">
+                                {explanation.example}
+                              </Text>
+                            </VStack>
+                          </Tooltip.Content>
+                        </Tooltip.Positioner>
+                      </Tooltip.Root>
+                    </HStack>
+                  
+                  <VStack align="stretch" gap={2}>
+                    {validProteins.map((protein) => {
+                      // Get features of this type for this protein
+                      const featuresOfType = protein.features.filter(f => f.type === featureType)
+                      const sequenceLength = protein.sequence_length!
+                      
+                      return (
+                        <Box key={protein.protein} position="relative">
+                          <HStack gap={2} mb={1}>
+                            <Text fontSize="xs" opacity={0.7} minW="80px">
+                              {protein.protein}
+                            </Text>
+                          </HStack>
+                          
+                          {featuresOfType.length === 0 ? (
+                            <Box
+                              h="24px"
+                              bg="gray.100"
+                              _dark={{ bg: "gray.600" }}
+                              rounded="sm"
+                              display="flex"
+                              alignItems="center"
+                              justifyContent="center"
+                            >
+                              <Text fontSize="2xs" opacity={0.5}>
+                                No {featureType} features
+                              </Text>
+                            </Box>
+                          ) : (
+                            <Box position="relative" h="24px">
+                              <svg
+                                width="100%"
+                                height="24"
+                                viewBox="0 0 1000 24"
+                                preserveAspectRatio="none"
+                                style={{ display: "block" }}
+                              >
+                                {/* Background bar showing full sequence length */}
+                                <rect
+                                  x="0"
+                                  y="2"
+                                  width={(sequenceLength / maxLength) * 1000}
+                                  height="20"
+                                  fill="currentColor"
+                                  opacity="0.1"
+                                  rx="2"
+                                />
+                                
+                                {/* Render features */}
+                                {featuresOfType.map((feature, idx) => {
+                                  const xPos = (feature.start / maxLength) * 1000
+                                  const width = ((feature.end - feature.start + 1) / maxLength) * 1000
+                                  const color = getFeatureColor(feature.type)
+                                  const key = `${protein.protein}-${feature.type}-${idx}`
+                                  
+                                  return (
+                                    <g
+                                      key={key}
+                                      onMouseEnter={() => setHoveredFeature(key)}
+                                      onMouseLeave={() => setHoveredFeature(null)}
+                                    >
+                                      <rect
+                                        x={xPos}
+                                        y="2"
+                                        width={width}
+                                        height="20"
+                                        fill={color}
+                                        rx="2"
+                                        style={{ cursor: "pointer" }}
+                                      />
+                                      {width > 80 && (
+                                        <text
+                                          x={xPos + width / 2}
+                                          y="16"
+                                          textAnchor="middle"
+                                          fill="white"
+                                          fontSize="9"
+                                          fontWeight="500"
+                                          style={{ pointerEvents: "none" }}
+                                        >
+                                          {feature.description.length > 15
+                                            ? `${feature.description.substring(0, 12)}...`
+                                            : feature.description}
+                                        </text>
+                                      )}
+                                    </g>
+                                  )
+                                })}
+                              </svg>
+                              
+                              {/* Tooltips */}
+                              {featuresOfType.map((feature, idx) => {
+                                const xPos = (feature.start / maxLength) * 100
+                                const width = ((feature.end - feature.start + 1) / maxLength) * 100
+                                const key = `${protein.protein}-${feature.type}-${idx}`
+                                const isHovered = hoveredFeature === key
+                                
+                                return (
+                                  <Tooltip.Root
+                                    key={`tooltip-${key}`}
+                                    open={isHovered}
+                                    openDelay={100}
+                                    closeDelay={100}
+                                  >
+                                    <Tooltip.Trigger asChild>
+                                      <Box
+                                        position="absolute"
+                                        left={`${xPos}%`}
+                                        top="2px"
+                                        width={`${width}%`}
+                                        height="20px"
+                                        style={{ pointerEvents: "none" }}
+                                      />
+                                    </Tooltip.Trigger>
+                                    <Tooltip.Positioner>
+                                      <Tooltip.Content>
+                                        <Tooltip.Arrow />
+                                        <VStack align="start" gap={0.5} fontSize="xs">
+                                          <Text fontWeight="semibold">
+                                            {feature.description}
+                                          </Text>
+                                          <Text opacity={0.9}>
+                                            Position: {feature.start}-{feature.end}
+                                          </Text>
+                                          <Text opacity={0.9}>
+                                            Length: {feature.end - feature.start + 1} aa
+                                          </Text>
+                                        </VStack>
+                                      </Tooltip.Content>
+                                    </Tooltip.Positioner>
+                                  </Tooltip.Root>
+                                )
+                              })}
+                            </Box>
+                          )}
+                        </Box>
+                      )
+                    })}
+                  </VStack>
+                </Box>
+              )})}
+            </Stack>
+            
+            {/* Render proteins without sequence data */}
+            {noDataProteins.map((protein) => (
+              <Box
+                key={protein.protein}
+                p={3}
+                borderWidth="1px"
+                borderColor="yellow.300"
+                rounded="md"
+                bg="yellow.50"
+                _dark={{ bg: "yellow.900", borderColor: "yellow.700" }}
+                role="alert"
               >
-                <LuX />
-              </IconButton>
-            </HStack>
-            <Text fontSize="xs" color="yellow.700" _dark={{ color: "yellow.300" }}>
-              No sequence data available
-            </Text>
-          </Box>
-        ))}
-        
-        {/* Render proteins with errors */}
-        {errorProteins.map((protein) => (
-          <Box
-            key={protein.protein}
-            p={3}
-            borderWidth="1px"
-            borderColor="red.300"
-            rounded="md"
-            bg="red.50"
-            _dark={{ bg: "red.900", borderColor: "red.700" }}
-            role="alert"
-          >
-            <HStack justify="space-between" mb={1}>
-              <Text fontWeight="semibold" fontSize="sm">
-                {protein.protein}
-              </Text>
-              <IconButton
-                size="xs"
-                variant="ghost"
-                onClick={() => onRemoveProtein(protein.protein)}
-                aria-label={`Remove ${protein.protein}`}
+                <HStack justify="space-between" mb={1}>
+                  <Text fontWeight="semibold" fontSize="sm">
+                    {protein.protein}
+                  </Text>
+                  <IconButton
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => onRemoveProtein(protein.protein)}
+                    aria-label={`Remove ${protein.protein}`}
+                  >
+                    <LuX />
+                  </IconButton>
+                </HStack>
+                <Text fontSize="xs" color="yellow.700" _dark={{ color: "yellow.300" }}>
+                  No sequence data available
+                </Text>
+              </Box>
+            ))}
+            
+            {/* Render proteins with errors */}
+            {errorProteins.map((protein) => (
+              <Box
+                key={protein.protein}
+                p={3}
+                borderWidth="1px"
+                borderColor="red.300"
+                rounded="md"
+                bg="red.50"
+                _dark={{ bg: "red.900", borderColor: "red.700" }}
+                role="alert"
               >
-                <LuX />
-              </IconButton>
-            </HStack>
-            <Text fontSize="xs" color="red.600" _dark={{ color: "red.300" }}>
-              {protein.error}
-            </Text>
+                <HStack justify="space-between" mb={1}>
+                  <Text fontWeight="semibold" fontSize="sm">
+                    {protein.protein}
+                  </Text>
+                  <IconButton
+                    size="xs"
+                    variant="ghost"
+                    onClick={() => onRemoveProtein(protein.protein)}
+                    aria-label={`Remove ${protein.protein}`}
+                  >
+                    <LuX />
+                  </IconButton>
+                </HStack>
+                <Text fontSize="xs" color="red.600" _dark={{ color: "red.300" }}>
+                  {protein.error}
+                </Text>
+              </Box>
+            ))}
           </Box>
-        ))}
-      </Stack>
-    </Box>
+        )}
+      </Box>
   )
 }

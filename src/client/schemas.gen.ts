@@ -55,6 +55,659 @@ export const Body_login_login_access_tokenSchema = {
     title: 'Body_login-login_access_token'
 } as const;
 
+export const ByNodeRequestSchema = {
+    properties: {
+        node_id: {
+            type: 'string',
+            title: 'Node Id'
+        },
+        graph: {
+            '$ref': '#/components/schemas/CytoscapeGraph'
+        },
+        network: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Network'
+        },
+        filename: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Filename'
+        },
+        name_mode: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: ['systematic', 'gene']
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Name Mode'
+        }
+    },
+    type: 'object',
+    required: ['node_id', 'graph'],
+    title: 'ByNodeRequest'
+} as const;
+
+export const ByNodeResponseSchema = {
+    properties: {
+        component_id: {
+            type: 'integer',
+            title: 'Component Id'
+        },
+        size: {
+            type: 'integer',
+            title: 'Size'
+        },
+        protein_counts: {
+            items: {
+                '$ref': '#/components/schemas/ComponentProteinCount'
+            },
+            type: 'array',
+            title: 'Protein Counts'
+        }
+    },
+    type: 'object',
+    required: ['component_id', 'size', 'protein_counts'],
+    title: 'ByNodeResponse'
+} as const;
+
+export const ComponentEntrySchema = {
+    properties: {
+        component_id: {
+            type: 'integer',
+            title: 'Component Id'
+        },
+        size: {
+            type: 'integer',
+            title: 'Size'
+        },
+        edges: {
+            type: 'integer',
+            title: 'Edges'
+        },
+        proteins_count: {
+            type: 'integer',
+            title: 'Proteins Count'
+        },
+        proteins: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Proteins'
+        }
+    },
+    type: 'object',
+    required: ['component_id', 'size', 'edges', 'proteins_count', 'proteins'],
+    title: 'ComponentEntry'
+} as const;
+
+export const ComponentProteinCountSchema = {
+    properties: {
+        protein: {
+            type: 'string',
+            title: 'Protein'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        },
+        type_counts: {
+            anyOf: [
+                {
+                    additionalProperties: {
+                        type: 'integer'
+                    },
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Type Counts'
+        },
+        ratio: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Ratio'
+        },
+        type_ratios: {
+            anyOf: [
+                {
+                    additionalProperties: {
+                        type: 'number'
+                    },
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Type Ratios'
+        },
+        other_components: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Other Components'
+        },
+        other_components_network: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Other Components Network'
+        }
+    },
+    type: 'object',
+    required: ['protein', 'count'],
+    title: 'ComponentProteinCount'
+} as const;
+
+export const ComponentSummarySchema = {
+    properties: {
+        filename: {
+            type: 'string',
+            title: 'Filename'
+        },
+        component_id: {
+            type: 'integer',
+            title: 'Component Id'
+        },
+        size: {
+            type: 'integer',
+            title: 'Size'
+        },
+        edges: {
+            type: 'integer',
+            title: 'Edges'
+        },
+        proteins_count: {
+            type: 'integer',
+            title: 'Proteins Count'
+        }
+    },
+    type: 'object',
+    required: ['filename', 'component_id', 'size', 'edges', 'proteins_count'],
+    title: 'ComponentSummary'
+} as const;
+
+export const ComponentsRequestSchema = {
+    properties: {
+        proteins: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Proteins'
+        },
+        name_mode: {
+            anyOf: [
+                {
+                    type: 'string',
+                    enum: ['systematic', 'gene']
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Name Mode'
+        }
+    },
+    type: 'object',
+    required: ['proteins'],
+    title: 'ComponentsRequest'
+} as const;
+
+export const ComponentsResponseSchema = {
+    properties: {
+        files: {
+            items: {
+                '$ref': '#/components/schemas/FileComponents'
+            },
+            type: 'array',
+            title: 'Files'
+        }
+    },
+    type: 'object',
+    required: ['files'],
+    title: 'ComponentsResponse'
+} as const;
+
+export const CytoscapeEdgeSchema = {
+    properties: {
+        data: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'CytoscapeEdge'
+} as const;
+
+export const CytoscapeGraphSchema = {
+    properties: {
+        nodes: {
+            items: {
+                '$ref': '#/components/schemas/CytoscapeNode'
+            },
+            type: 'array',
+            title: 'Nodes'
+        },
+        edges: {
+            items: {
+                '$ref': '#/components/schemas/CytoscapeEdge'
+            },
+            type: 'array',
+            title: 'Edges'
+        }
+    },
+    type: 'object',
+    required: ['nodes', 'edges'],
+    title: 'CytoscapeGraph'
+} as const;
+
+export const CytoscapeNodeSchema = {
+    properties: {
+        data: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'CytoscapeNode'
+} as const;
+
+export const FavoriteComponentCreateSchema = {
+    properties: {
+        network_name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Network Name'
+        },
+        filename: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Filename'
+        },
+        component_id: {
+            type: 'integer',
+            minimum: 0,
+            title: 'Component Id'
+        },
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    required: ['network_name', 'filename', 'component_id'],
+    title: 'FavoriteComponentCreate'
+} as const;
+
+export const FavoriteComponentPublicSchema = {
+    properties: {
+        network_name: {
+            type: 'string',
+            maxLength: 255,
+            minLength: 1,
+            title: 'Network Name'
+        },
+        filename: {
+            type: 'string',
+            maxLength: 1024,
+            minLength: 1,
+            title: 'Filename'
+        },
+        component_id: {
+            type: 'integer',
+            minimum: 0,
+            title: 'Component Id'
+        },
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        },
+        id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Id'
+        },
+        owner_id: {
+            type: 'string',
+            format: 'uuid',
+            title: 'Owner Id'
+        }
+    },
+    type: 'object',
+    required: ['network_name', 'filename', 'component_id', 'id', 'owner_id'],
+    title: 'FavoriteComponentPublic'
+} as const;
+
+export const FavoriteComponentUpdateSchema = {
+    properties: {
+        title: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Title'
+        },
+        description: {
+            anyOf: [
+                {
+                    type: 'string',
+                    maxLength: 255
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Description'
+        }
+    },
+    type: 'object',
+    title: 'FavoriteComponentUpdate'
+} as const;
+
+export const FavoriteComponentsPublicSchema = {
+    properties: {
+        data: {
+            items: {
+                '$ref': '#/components/schemas/FavoriteComponentPublic'
+            },
+            type: 'array',
+            title: 'Data'
+        },
+        count: {
+            type: 'integer',
+            title: 'Count'
+        }
+    },
+    type: 'object',
+    required: ['data', 'count'],
+    title: 'FavoriteComponentsPublic'
+} as const;
+
+export const FavoriteExistsSchema = {
+    properties: {
+        exists: {
+            type: 'boolean',
+            title: 'Exists'
+        },
+        id: {
+            anyOf: [
+                {
+                    type: 'string',
+                    format: 'uuid'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Id'
+        }
+    },
+    type: 'object',
+    required: ['exists'],
+    title: 'FavoriteExists'
+} as const;
+
+export const FileComponentsSchema = {
+    properties: {
+        filename: {
+            type: 'string',
+            title: 'Filename'
+        },
+        components: {
+            items: {
+                '$ref': '#/components/schemas/ComponentEntry'
+            },
+            type: 'array',
+            title: 'Components'
+        }
+    },
+    type: 'object',
+    required: ['filename', 'components'],
+    title: 'FileComponents'
+} as const;
+
+export const GOHierarchyResponseSchema = {
+    properties: {
+        terms: {
+            additionalProperties: {
+                '$ref': '#/components/schemas/GOTermHierarchy'
+            },
+            type: 'object',
+            title: 'Terms'
+        },
+        root_terms: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Root Terms'
+        }
+    },
+    type: 'object',
+    required: ['terms', 'root_terms'],
+    title: 'GOHierarchyResponse',
+    description: 'Response containing GO term hierarchy.'
+} as const;
+
+export const GOTermSchema = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        parents: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Parents',
+            default: []
+        },
+        evidence: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Evidence'
+        },
+        p_value: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'P Value'
+        }
+    },
+    type: 'object',
+    required: ['id', 'name'],
+    title: 'GOTerm',
+    description: 'Represents a single GO term annotation.'
+} as const;
+
+export const GOTermHierarchySchema = {
+    properties: {
+        id: {
+            type: 'string',
+            title: 'Id'
+        },
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        parents: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Parents',
+            default: []
+        },
+        children: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Children',
+            default: []
+        },
+        ancestors: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Ancestors',
+            default: []
+        },
+        aspect: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Aspect'
+        }
+    },
+    type: 'object',
+    required: ['id', 'name'],
+    title: 'GOTermHierarchy',
+    description: 'GO term with full hierarchy information.'
+} as const;
+
+export const GOTermsByDomainSchema = {
+    properties: {
+        biological_process: {
+            items: {
+                '$ref': '#/components/schemas/GOTerm'
+            },
+            type: 'array',
+            title: 'Biological Process',
+            default: []
+        },
+        cellular_component: {
+            items: {
+                '$ref': '#/components/schemas/GOTerm'
+            },
+            type: 'array',
+            title: 'Cellular Component',
+            default: []
+        },
+        molecular_function: {
+            items: {
+                '$ref': '#/components/schemas/GOTerm'
+            },
+            type: 'array',
+            title: 'Molecular Function',
+            default: []
+        }
+    },
+    type: 'object',
+    title: 'GOTermsByDomain',
+    description: 'GO terms organized by domain.'
+} as const;
+
 export const HTTPValidationErrorSchema = {
     properties: {
         detail: {
@@ -182,6 +835,134 @@ export const ItemsPublicSchema = {
     title: 'ItemsPublic'
 } as const;
 
+export const LayoutRequestSchema = {
+    properties: {
+        graph: {
+            '$ref': '#/components/schemas/CytoscapeGraph'
+        },
+        seed: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Seed'
+        },
+        scale: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Scale',
+            default: 1
+        },
+        iterations: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Iterations',
+            default: 50
+        },
+        node_radii: {
+            anyOf: [
+                {
+                    additionalProperties: {
+                        type: 'number'
+                    },
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Node Radii'
+        },
+        nodeSizes: {
+            anyOf: [
+                {
+                    additionalProperties: {
+                        '$ref': '#/components/schemas/NodeSize'
+                    },
+                    type: 'object'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Nodesizes'
+        },
+        padding: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Padding',
+            default: 2
+        },
+        anti_overlap_iterations: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Anti Overlap Iterations',
+            default: 80
+        },
+        spread_target_coverage: {
+            anyOf: [
+                {
+                    type: 'number'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Spread Target Coverage',
+            default: 0.12
+        }
+    },
+    type: 'object',
+    required: ['graph'],
+    title: 'LayoutRequest'
+} as const;
+
+export const LayoutResponseSchema = {
+    properties: {
+        positions: {
+            additionalProperties: {
+                additionalProperties: {
+                    type: 'number'
+                },
+                type: 'object'
+            },
+            type: 'object',
+            title: 'Positions'
+        }
+    },
+    type: 'object',
+    required: ['positions'],
+    title: 'LayoutResponse'
+} as const;
+
 export const MessageSchema = {
     properties: {
         message: {
@@ -192,6 +973,22 @@ export const MessageSchema = {
     type: 'object',
     required: ['message'],
     title: 'Message'
+} as const;
+
+export const NetworkInfoSchema = {
+    properties: {
+        name: {
+            type: 'string',
+            title: 'Name'
+        },
+        file_count: {
+            type: 'integer',
+            title: 'File Count'
+        }
+    },
+    type: 'object',
+    required: ['name', 'file_count'],
+    title: 'NetworkInfo'
 } as const;
 
 export const NewPasswordSchema = {
@@ -210,6 +1007,76 @@ export const NewPasswordSchema = {
     type: 'object',
     required: ['token', 'new_password'],
     title: 'NewPassword'
+} as const;
+
+export const NodeSizeSchema = {
+    properties: {
+        width: {
+            type: 'number',
+            title: 'Width'
+        },
+        height: {
+            type: 'number',
+            title: 'Height'
+        }
+    },
+    type: 'object',
+    required: ['width', 'height'],
+    title: 'NodeSize'
+} as const;
+
+export const PagedComponentsSchema = {
+    properties: {
+        items: {
+            items: {
+                '$ref': '#/components/schemas/ComponentSummary'
+            },
+            type: 'array',
+            title: 'Items'
+        },
+        total: {
+            type: 'integer',
+            title: 'Total'
+        },
+        page: {
+            type: 'integer',
+            title: 'Page'
+        },
+        size: {
+            type: 'integer',
+            title: 'Size'
+        }
+    },
+    type: 'object',
+    required: ['items', 'total', 'page', 'size'],
+    title: 'PagedComponents'
+} as const;
+
+export const PagedProteinsSchema = {
+    properties: {
+        items: {
+            items: {
+                '$ref': '#/components/schemas/ProteinItem'
+            },
+            type: 'array',
+            title: 'Items'
+        },
+        total: {
+            type: 'integer',
+            title: 'Total'
+        },
+        page: {
+            type: 'integer',
+            title: 'Page'
+        },
+        size: {
+            type: 'integer',
+            title: 'Size'
+        }
+    },
+    type: 'object',
+    required: ['items', 'total', 'page', 'size'],
+    title: 'PagedProteins'
 } as const;
 
 export const PrivateUserCreateSchema = {
@@ -235,6 +1102,204 @@ export const PrivateUserCreateSchema = {
     type: 'object',
     required: ['email', 'password', 'full_name'],
     title: 'PrivateUserCreate'
+} as const;
+
+export const ProteinFeatureSchema = {
+    properties: {
+        type: {
+            type: 'string',
+            title: 'Type'
+        },
+        description: {
+            type: 'string',
+            title: 'Description'
+        },
+        start: {
+            type: 'integer',
+            title: 'Start'
+        },
+        end: {
+            type: 'integer',
+            title: 'End'
+        }
+    },
+    type: 'object',
+    required: ['type', 'description', 'start', 'end'],
+    title: 'ProteinFeature',
+    description: 'Represents a single protein sequence feature.'
+} as const;
+
+export const ProteinFeatureDataSchema = {
+    properties: {
+        protein: {
+            type: 'string',
+            title: 'Protein'
+        },
+        sequence_length: {
+            anyOf: [
+                {
+                    type: 'integer'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Sequence Length'
+        },
+        features: {
+            items: {
+                '$ref': '#/components/schemas/ProteinFeature'
+            },
+            type: 'array',
+            title: 'Features'
+        },
+        go_terms: {
+            anyOf: [
+                {
+                    '$ref': '#/components/schemas/GOTermsByDomain'
+                },
+                {
+                    type: 'null'
+                }
+            ]
+        },
+        error: {
+            anyOf: [
+                {
+                    type: 'string'
+                },
+                {
+                    type: 'null'
+                }
+            ],
+            title: 'Error'
+        }
+    },
+    type: 'object',
+    required: ['protein', 'sequence_length', 'features', 'error'],
+    title: 'ProteinFeatureData',
+    description: 'Represents protein data with features for a single protein.'
+} as const;
+
+export const ProteinFeaturesResponseSchema = {
+    properties: {
+        proteins: {
+            items: {
+                '$ref': '#/components/schemas/ProteinFeatureData'
+            },
+            type: 'array',
+            title: 'Proteins'
+        }
+    },
+    type: 'object',
+    required: ['proteins'],
+    title: 'ProteinFeaturesResponse',
+    description: 'Response containing feature data for multiple proteins.'
+} as const;
+
+export const ProteinItemSchema = {
+    properties: {
+        protein: {
+            type: 'string',
+            title: 'Protein'
+        },
+        files: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Files'
+        },
+        types: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Types'
+        }
+    },
+    type: 'object',
+    required: ['protein', 'files', 'types'],
+    title: 'ProteinItem'
+} as const;
+
+export const SGDDetailsItemSchema = {
+    properties: {
+        token: {
+            type: 'string',
+            title: 'Token'
+        },
+        gene_name: {
+            type: 'string',
+            title: 'Gene Name'
+        }
+    },
+    type: 'object',
+    required: ['token', 'gene_name'],
+    title: 'SGDDetailsItem'
+} as const;
+
+export const SGDDetailsRequestSchema = {
+    properties: {
+        tokens: {
+            items: {
+                type: 'string'
+            },
+            type: 'array',
+            title: 'Tokens'
+        }
+    },
+    type: 'object',
+    required: ['tokens'],
+    title: 'SGDDetailsRequest'
+} as const;
+
+export const SubgraphEdgeSchema = {
+    properties: {
+        data: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'SubgraphEdge'
+} as const;
+
+export const SubgraphGraphSchema = {
+    properties: {
+        nodes: {
+            items: {
+                '$ref': '#/components/schemas/SubgraphNode'
+            },
+            type: 'array',
+            title: 'Nodes'
+        },
+        edges: {
+            items: {
+                '$ref': '#/components/schemas/SubgraphEdge'
+            },
+            type: 'array',
+            title: 'Edges'
+        }
+    },
+    type: 'object',
+    required: ['nodes', 'edges'],
+    title: 'SubgraphGraph'
+} as const;
+
+export const SubgraphNodeSchema = {
+    properties: {
+        data: {
+            additionalProperties: true,
+            type: 'object',
+            title: 'Data'
+        }
+    },
+    type: 'object',
+    required: ['data'],
+    title: 'SubgraphNode'
 } as const;
 
 export const TokenSchema = {

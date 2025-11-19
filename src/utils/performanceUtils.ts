@@ -4,8 +4,8 @@
  * and managing performance warnings based on network size.
  */
 
-export type PerformanceTierName = 'optimal' | 'moderate' | 'large' | 'extreme'
-export type TierColor = 'green' | 'yellow' | 'orange' | 'red'
+export type PerformanceTierName = 'optimal' | 'moderate' | 'large' | 'extreme' | 'massive'
+export type TierColor = 'green' | 'yellow' | 'orange' | 'red' | 'purple'
 
 export interface OptimizationConfig {
   // Note: These are suggestions only, not automatically applied
@@ -14,6 +14,15 @@ export interface OptimizationConfig {
   suggestFasterLayout?: boolean
   suggestGridLayout?: boolean
   showFilterWarning?: boolean
+  hideAllLabels?: boolean
+  disableEdgeArrows?: boolean
+  disableEdgeSelection?: boolean
+  reduceNodeDetail?: boolean
+  useProgressiveRendering?: boolean
+  forceSimpleLayout?: boolean
+  forceGridLayout?: boolean
+  disableAnimations?: boolean
+  recommendDataFiltering?: boolean
 }
 
 export interface PerformanceTier {
@@ -57,14 +66,35 @@ export const PERFORMANCE_TIERS: PerformanceTier[] = [
   },
   {
     name: 'extreme',
-    nodeThreshold: 1000,
-    edgeThreshold: 2000,
+    nodeThreshold: 2000,
+    edgeThreshold: 4000,
     color: 'red',
     optimizations: {
       suggestDisableEdgeHover: true,
       suggestHideLabelsOnViewport: true,
-      suggestGridLayout: true,
+      hideAllLabels: true,
+      disableEdgeArrows: true,
+      useProgressiveRendering: true,
+      forceSimpleLayout: true,
       showFilterWarning: true
+    }
+  },
+  {
+    name: 'massive',
+    nodeThreshold: 5000,
+    edgeThreshold: 10000,
+    color: 'purple',
+    optimizations: {
+      suggestDisableEdgeHover: true,
+      hideAllLabels: true,
+      disableEdgeArrows: true,
+      disableEdgeSelection: true,
+      useProgressiveRendering: true,
+      forceGridLayout: true,
+      disableAnimations: true,
+      reduceNodeDetail: true,
+      showFilterWarning: true,
+      recommendDataFiltering: true
     }
   }
 ]
@@ -100,8 +130,104 @@ const LAYOUT_TIME_ESTIMATES: Record<string, number> = {
   breadthfirst: 200,
   fcose: 800,
   'cose-bilkent': 1000,
+  cola: 600,  // Constraint-based force-directed layout (optimal <500, acceptable <1000, discouraged >1000)
   elk: 600,
   'concentric-attribute': 150,
+}
+
+/**
+ * Cola layout options interface
+ * Cola is a constraint-based force-directed layout algorithm
+ */
+export interface ColaLayoutOptions {
+  name: 'cola'
+  animate: boolean
+  refresh: number
+  maxSimulationTime: number
+  ungrabifyWhileSimulating: boolean
+  fit: boolean
+  padding: number
+  
+  // Cola-specific options
+  nodeSpacing: number           // Minimum space between nodes
+  edgeLength: number            // Ideal edge length
+  convergenceThreshold: number  // Stop when energy below this threshold
+  
+  // Performance tuning
+  randomize: boolean            // Start with random positions
+  avoidOverlap: boolean         // Prevent node overlap (slower for large graphs)
+  handleDisconnected: boolean   // Separate disconnected components
+  
+  // Constraint support (optional)
+  alignment?: Array<{           // Align nodes horizontally or vertically
+    axis: 'x' | 'y'
+    nodes: string[]
+  }>
+}
+
+/**
+ * Default configuration for cola layout algorithm
+ * Cola provides high-quality constraint-based positioning
+ * 
+ * Performance characteristics:
+ * - Optimal for: <500 nodes
+ * - Acceptable for: 500-1000 nodes (with warnings)
+ * - Discouraged for: >1000 nodes (suggest alternatives)
+ */
+export const DEFAULT_COLA_OPTIONS: ColaLayoutOptions = {
+  name: 'cola',
+  animate: false,
+  refresh: 1,
+  maxSimulationTime: 30000,
+  ungrabifyWhileSimulating: false,
+  fit: false,
+  padding: 30,
+  
+  // Cola-specific options
+  nodeSpacing: 10,              // Minimum space between nodes
+  edgeLength: 100,              // Ideal edge length
+  convergenceThreshold: 0.01,   // Stop when energy below this threshold
+  
+  // Performance tuning
+  randomize: false,             // Start with current positions
+  avoidOverlap: true,           // Prevent node overlap (slower for large graphs)
+  handleDisconnected: true,     // Separate disconnected components
+}
+
+/**
+ * Get optimized cola layout options based on network size
+ * Adjusts parameters to balance quality and performance for different network sizes
+ * 
+ * Size-based optimization:
+ * - <500 nodes: Full quality settings (optimal)
+ * - 500-1000 nodes: Reduced quality for better performance (acceptable)
+ * - >1000 nodes: Minimal quality for fastest completion (discouraged)
+ * 
+ * @param nodeCount - Number of nodes in the network
+ * @returns Optimized cola layout options
+ */
+export function getColaOptionsForSize(nodeCount: number): ColaLayoutOptions {
+  if (nodeCount < 500) {
+    // Optimal range - use full quality settings
+    return DEFAULT_COLA_OPTIONS
+  } else if (nodeCount < 1000) {
+    // Acceptable range - reduce quality for better performance
+    return {
+      ...DEFAULT_COLA_OPTIONS,
+      avoidOverlap: false,        // Disable overlap detection
+      maxSimulationTime: 20000,   // Reduce max time to 20 seconds
+      convergenceThreshold: 0.05, // Less strict convergence
+    }
+  } else {
+    // Not recommended - minimal quality for fastest completion
+    return {
+      ...DEFAULT_COLA_OPTIONS,
+      avoidOverlap: false,
+      maxSimulationTime: 10000,   // Reduce max time to 10 seconds
+      convergenceThreshold: 0.1,  // Much less strict convergence
+      animate: false,             // Disable animation
+    }
+  }
 }
 
 /**
@@ -193,7 +319,7 @@ const LAYOUT_PREFERENCE_KEY = 'cytoscape-layout-preference'
  * Network size bucket for grouping similar network sizes
  * Used to determine which stored preference applies
  */
-type NetworkSizeBucket = 'small' | 'medium' | 'large' | 'very-large' | 'extreme'
+type NetworkSizeBucket = 'small' | 'medium' | 'large' | 'very-large' | 'extreme' | 'massive'
 
 interface LayoutPreference {
   layoutName: string
@@ -210,7 +336,10 @@ interface LayoutPreference {
  */
 function getNetworkSizeBucket(nodeCount: number, edgeCount: number): NetworkSizeBucket {
   // Use the same thresholds as performance tiers for consistency
-  if (nodeCount >= 1000 || edgeCount >= 2000) {
+  if (nodeCount >= 5000 || edgeCount >= 10000) {
+    return 'massive'
+  }
+  if (nodeCount >= 2000 || edgeCount >= 4000) {
     return 'extreme'
   }
   if (nodeCount >= 500 || edgeCount >= 1000) {

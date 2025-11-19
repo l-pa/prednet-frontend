@@ -9,6 +9,156 @@ export type Body_login_login_access_token = {
     client_secret?: (string | null);
 };
 
+export type ByNodeRequest = {
+    node_id: string;
+    graph: CytoscapeGraph;
+    network?: (string | null);
+    filename?: (string | null);
+    name_mode?: ('systematic' | 'gene' | null);
+};
+
+export type ByNodeResponse = {
+    component_id: number;
+    size: number;
+    protein_counts: Array<ComponentProteinCount>;
+};
+
+export type ComponentEntry = {
+    component_id: number;
+    size: number;
+    edges: number;
+    proteins_count: number;
+    proteins: Array<(string)>;
+};
+
+export type ComponentProteinCount = {
+    protein: string;
+    count: number;
+    type_counts?: ({
+    [key: string]: (number);
+} | null);
+    ratio?: (number | null);
+    type_ratios?: ({
+    [key: string]: (number);
+} | null);
+    other_components?: (number | null);
+    other_components_network?: (number | null);
+};
+
+export type ComponentsRequest = {
+    proteins: Array<(string)>;
+    name_mode?: ('systematic' | 'gene' | null);
+};
+
+export type ComponentsResponse = {
+    files: Array<FileComponents>;
+};
+
+export type ComponentSummary = {
+    filename: string;
+    component_id: number;
+    size: number;
+    edges: number;
+    proteins_count: number;
+};
+
+export type CytoscapeEdge = {
+    data: {
+        [key: string]: unknown;
+    };
+};
+
+export type CytoscapeGraph = {
+    nodes: Array<CytoscapeNode>;
+    edges: Array<CytoscapeEdge>;
+};
+
+export type CytoscapeNode = {
+    data: {
+        [key: string]: unknown;
+    };
+};
+
+export type FavoriteComponentCreate = {
+    network_name: string;
+    filename: string;
+    component_id: number;
+    title?: (string | null);
+    description?: (string | null);
+};
+
+export type FavoriteComponentPublic = {
+    network_name: string;
+    filename: string;
+    component_id: number;
+    title?: (string | null);
+    description?: (string | null);
+    id: string;
+    owner_id: string;
+};
+
+export type FavoriteComponentsPublic = {
+    data: Array<FavoriteComponentPublic>;
+    count: number;
+};
+
+export type FavoriteComponentUpdate = {
+    title?: (string | null);
+    description?: (string | null);
+};
+
+export type FavoriteExists = {
+    exists: boolean;
+    id?: (string | null);
+};
+
+export type FileComponents = {
+    filename: string;
+    components: Array<ComponentEntry>;
+};
+
+/**
+ * Response containing GO term hierarchy.
+ */
+export type GOHierarchyResponse = {
+    terms: {
+        [key: string]: GOTermHierarchy;
+    };
+    root_terms: Array<(string)>;
+};
+
+/**
+ * Represents a single GO term annotation.
+ */
+export type GOTerm = {
+    id: string;
+    name: string;
+    parents?: Array<(string)>;
+    evidence?: (string | null);
+    p_value?: (number | null);
+};
+
+/**
+ * GO term with full hierarchy information.
+ */
+export type GOTermHierarchy = {
+    id: string;
+    name: string;
+    parents?: Array<(string)>;
+    children?: Array<(string)>;
+    ancestors?: Array<(string)>;
+    aspect?: (string | null);
+};
+
+/**
+ * GO terms organized by domain.
+ */
+export type GOTermsByDomain = {
+    biological_process?: Array<GOTerm>;
+    cellular_component?: Array<GOTerm>;
+    molecular_function?: Array<GOTerm>;
+};
+
 export type HTTPValidationError = {
     detail?: Array<ValidationError>;
 };
@@ -35,8 +185,37 @@ export type ItemUpdate = {
     description?: (string | null);
 };
 
+export type LayoutRequest = {
+    graph: CytoscapeGraph;
+    seed?: (number | null);
+    scale?: (number | null);
+    iterations?: (number | null);
+    node_radii?: ({
+    [key: string]: (number);
+} | null);
+    nodeSizes?: ({
+    [key: string]: NodeSize;
+} | null);
+    padding?: (number | null);
+    anti_overlap_iterations?: (number | null);
+    spread_target_coverage?: (number | null);
+};
+
+export type LayoutResponse = {
+    positions: {
+        [key: string]: {
+            [key: string]: (number);
+        };
+    };
+};
+
 export type Message = {
     message: string;
+};
+
+export type NetworkInfo = {
+    name: string;
+    file_count: number;
 };
 
 export type NewPassword = {
@@ -44,11 +223,90 @@ export type NewPassword = {
     new_password: string;
 };
 
+export type NodeSize = {
+    width: number;
+    height: number;
+};
+
+export type PagedComponents = {
+    items: Array<ComponentSummary>;
+    total: number;
+    page: number;
+    size: number;
+};
+
+export type PagedProteins = {
+    items: Array<ProteinItem>;
+    total: number;
+    page: number;
+    size: number;
+};
+
 export type PrivateUserCreate = {
     email: string;
     password: string;
     full_name: string;
     is_verified?: boolean;
+};
+
+/**
+ * Represents a single protein sequence feature.
+ */
+export type ProteinFeature = {
+    type: string;
+    description: string;
+    start: number;
+    end: number;
+};
+
+/**
+ * Represents protein data with features for a single protein.
+ */
+export type ProteinFeatureData = {
+    protein: string;
+    sequence_length: (number | null);
+    features: Array<ProteinFeature>;
+    go_terms?: (GOTermsByDomain | null);
+    error: (string | null);
+};
+
+/**
+ * Response containing feature data for multiple proteins.
+ */
+export type ProteinFeaturesResponse = {
+    proteins: Array<ProteinFeatureData>;
+};
+
+export type ProteinItem = {
+    protein: string;
+    files: Array<(string)>;
+    types: Array<(string)>;
+};
+
+export type SGDDetailsItem = {
+    token: string;
+    gene_name: string;
+};
+
+export type SGDDetailsRequest = {
+    tokens: Array<(string)>;
+};
+
+export type SubgraphEdge = {
+    data: {
+        [key: string]: unknown;
+    };
+};
+
+export type SubgraphGraph = {
+    nodes: Array<SubgraphNode>;
+    edges: Array<SubgraphEdge>;
+};
+
+export type SubgraphNode = {
+    data: {
+        [key: string]: unknown;
+    };
 };
 
 export type Token = {
@@ -106,6 +364,46 @@ export type ValidationError = {
     msg: string;
     type: string;
 };
+
+export type FavoritesReadFavoritesData = {
+    limit?: number;
+    skip?: number;
+};
+
+export type FavoritesReadFavoritesResponse = (FavoriteComponentsPublic);
+
+export type FavoritesCreateFavoriteData = {
+    requestBody: FavoriteComponentCreate;
+};
+
+export type FavoritesCreateFavoriteResponse = (FavoriteComponentPublic);
+
+export type FavoritesReadFavoriteData = {
+    id: string;
+};
+
+export type FavoritesReadFavoriteResponse = (FavoriteComponentPublic);
+
+export type FavoritesUpdateFavoriteData = {
+    id: string;
+    requestBody: FavoriteComponentUpdate;
+};
+
+export type FavoritesUpdateFavoriteResponse = (FavoriteComponentPublic);
+
+export type FavoritesDeleteFavoriteData = {
+    id: string;
+};
+
+export type FavoritesDeleteFavoriteResponse = (Message);
+
+export type FavoritesFavoriteExistsData = {
+    componentId: number;
+    filename: string;
+    networkName: string;
+};
+
+export type FavoritesFavoriteExistsResponse = (FavoriteExists);
 
 export type ItemsReadItemsData = {
     limit?: number;
@@ -165,11 +463,130 @@ export type LoginRecoverPasswordHtmlContentData = {
 
 export type LoginRecoverPasswordHtmlContentResponse = (string);
 
+export type NetworksGetNetworksResponse = (Array<NetworkInfo>);
+
+export type NetworksGetNetworkFilesData = {
+    networkName: string;
+};
+
+export type NetworksGetNetworkFilesResponse = (Array<(string)>);
+
+export type NetworksGetSgdDetailsData = {
+    requestBody: SGDDetailsRequest;
+};
+
+export type NetworksGetSgdDetailsResponse = (Array<SGDDetailsItem>);
+
+export type NetworksGetGdfFileData = {
+    filename: string;
+    networkName: string;
+};
+
+export type NetworksGetGdfFileResponse = (CytoscapeGraph);
+
+export type NetworksComputeSpringLayoutData = {
+    requestBody: LayoutRequest;
+};
+
+export type NetworksComputeSpringLayoutResponse = (LayoutResponse);
+
+export type NetworksGetComponentProteinsByNodeData = {
+    requestBody: ByNodeRequest;
+};
+
+export type NetworksGetComponentProteinsByNodeResponse = (ByNodeResponse);
+
 export type PrivateCreateUserData = {
     requestBody: PrivateUserCreate;
 };
 
 export type PrivateCreateUserResponse = (UserPublic);
+
+export type ProteinsGetGoHierarchyData = {
+    /**
+     * Comma-separated list of GO IDs (e.g., GO:0006936,GO:0003012)
+     */
+    goIds: string;
+    /**
+     * Include all ancestor terms in the hierarchy
+     */
+    includeAncestors?: boolean;
+};
+
+export type ProteinsGetGoHierarchyResponse = (GOHierarchyResponse);
+
+export type ProteinsGetComponentsMembershipData = {
+    networkName: string;
+    requestBody: ComponentsRequest;
+};
+
+export type ProteinsGetComponentsMembershipResponse = (ComponentsResponse);
+
+export type ProteinsGetComponentSubgraphData = {
+    componentId: number;
+    filename: string;
+    nameMode?: 'systematic' | 'gene';
+    networkName: string;
+};
+
+export type ProteinsGetComponentSubgraphResponse = (SubgraphGraph);
+
+export type ProteinsSearchComponentsByIdData = {
+    /**
+     * Optional GDF filename to filter
+     */
+    file?: (string | null);
+    nameMode?: 'systematic' | 'gene';
+    networkName: string;
+    page?: number;
+    /**
+     * Search by component ID (exact number or digits)
+     */
+    q?: (string | null);
+    size?: number;
+};
+
+export type ProteinsSearchComponentsByIdResponse = (PagedComponents);
+
+export type ProteinsGetProteinFeaturesData = {
+    nameMode?: 'systematic' | 'gene';
+    networkName: string;
+    /**
+     * NCBI taxonomy ID (default: S. cerevisiae)
+     */
+    organismId?: string;
+    /**
+     * Comma-separated list of protein identifiers
+     */
+    proteins: string;
+    /**
+     * Data source: uniprot or stringdb
+     */
+    source?: 'uniprot' | 'stringdb';
+};
+
+export type ProteinsGetProteinFeaturesResponse = (ProteinFeaturesResponse);
+
+export type ProteinsGetProteinsData = {
+    nameMode?: 'systematic' | 'gene';
+    networkName: string;
+    page?: number;
+    /**
+     * Space-separated protein names to filter by
+     */
+    q?: (string | null);
+    /**
+     * Space-separated selected proteins; return only proteins that co-occur in same components across files
+     */
+    selected?: (string | null);
+    size?: number;
+    /**
+     * Comma-separated node types to filter by (e.g., 'prediction,reference')
+     */
+    types?: (string | null);
+};
+
+export type ProteinsGetProteinsResponse = (PagedProteins);
 
 export type UsersReadUsersData = {
     limit?: number;

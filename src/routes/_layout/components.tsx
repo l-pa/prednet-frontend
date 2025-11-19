@@ -27,12 +27,21 @@ interface NetworkInfo {
   file_count: number
 }
 
+interface EdgeTypeStats {
+  matched_prediction: number
+  matched_reference: number
+  prediction: number
+  reference: number
+  total: number
+}
+
 interface ComponentSummary {
   filename: string
   component_id: number
   size: number
   edges: number
   proteins_count: number
+  edge_type_stats?: EdgeTypeStats
 }
 
 interface PagedComponents {
@@ -56,6 +65,21 @@ const ComponentsPage = () => {
   const [loadingFiles, setLoadingFiles] = useState(false)
   const [loadingComponents, setLoadingComponents] = useState(false)
   const [panelsCollapsed, setPanelsCollapsed] = useState(false)
+  
+  // Edge type filter state
+  const [showEdgeFilter, setShowEdgeFilter] = useState(false)
+  const [edgeFilterMin, setEdgeFilterMin] = useState({
+    matchedPred: "0",
+    unmatchedPred: "0",
+    matchedRef: "0",
+    unmatchedRef: "0",
+  })
+  const [edgeFilterMax, setEdgeFilterMax] = useState({
+    matchedPred: "100",
+    unmatchedPred: "100",
+    matchedRef: "100",
+    unmatchedRef: "100",
+  })
 
   const [subgraph, setSubgraph] = useState<null | { nodes: { data: Record<string, any> }[]; edges: { data: Record<string, any> }[] }>(null)
   const [subgraphOpen, setSubgraphOpen] = useState(false)
@@ -118,6 +142,25 @@ const ComponentsPage = () => {
         query.set('name_mode', mode)
       } catch {/* ignore */}
       if (q && q.trim()) query.set("q", q.trim())
+      
+      // Add edge type filters if not default range
+      if (edgeFilterMin.matchedPred !== "0" || edgeFilterMax.matchedPred !== "100") {
+        query.set("min_matched_pred", String(Number(edgeFilterMin.matchedPred) / 100))
+        query.set("max_matched_pred", String(Number(edgeFilterMax.matchedPred) / 100))
+      }
+      if (edgeFilterMin.unmatchedPred !== "0" || edgeFilterMax.unmatchedPred !== "100") {
+        query.set("min_unmatched_pred", String(Number(edgeFilterMin.unmatchedPred) / 100))
+        query.set("max_unmatched_pred", String(Number(edgeFilterMax.unmatchedPred) / 100))
+      }
+      if (edgeFilterMin.matchedRef !== "0" || edgeFilterMax.matchedRef !== "100") {
+        query.set("min_matched_ref", String(Number(edgeFilterMin.matchedRef) / 100))
+        query.set("max_matched_ref", String(Number(edgeFilterMax.matchedRef) / 100))
+      }
+      if (edgeFilterMin.unmatchedRef !== "0" || edgeFilterMax.unmatchedRef !== "100") {
+        query.set("min_unmatched_ref", String(Number(edgeFilterMin.unmatchedRef) / 100))
+        query.set("max_unmatched_ref", String(Number(edgeFilterMax.unmatchedRef) / 100))
+      }
+      
       const url = `${baseUrl}/api/v1/proteins/${selectedNetwork}/components/search?${query.toString()}`
       const response = await fetch(url)
       if (!response.ok) throw new Error("Failed to fetch components")
@@ -300,12 +343,169 @@ const ComponentsPage = () => {
                 />
                 <Button size="sm" onClick={onSearch} variant="outline" disabled={!selectedNetwork}>Search</Button>
                 <Button size="sm" onClick={onClear} variant="ghost" disabled={!selectedNetwork}>Clear</Button>
+                <Button size="sm" onClick={() => setShowEdgeFilter(!showEdgeFilter)} variant={showEdgeFilter ? "solid" : "outline"} disabled={!selectedNetwork}>
+                  <FiGrid style={{ marginRight: 4 }} />
+                  Edge Filter
+                </Button>
                 <Button size="sm" onClick={() => fetchComponents(1, appliedQuery)} variant="solid" disabled={!selectedNetwork}>Refresh</Button>
               </HStack>
               {components && (
                 <Text fontSize="sm" opacity={0.7}>{components.total} components</Text>
               )}
             </Flex>
+            
+            {/* Edge Type Filter Panel */}
+            {showEdgeFilter && (
+              <Box mt={4} p={4} borderWidth="1px" borderRadius="md" bg="gray.50" _dark={{ bg: "gray.800" }}>
+                <VStack align="stretch" gap={4}>
+                  <Text fontWeight="semibold" fontSize="sm">Filter by Node Type Ratios (%)</Text>
+                  
+                  <Grid templateColumns="repeat(2, 1fr)" gap={6}>
+                    {/* Predictions */}
+                    <Box>
+                      <Text fontSize="xs" fontWeight="semibold" mb={3}>Predictions</Text>
+                      <VStack align="stretch" gap={4}>
+                        <Box>
+                          <HStack justify="space-between" mb={1}>
+                            <Text fontSize="xs" opacity={0.8}>Matched %</Text>
+                            <Text fontSize="xs" fontWeight="semibold">{edgeFilterMin.matchedPred}% - {edgeFilterMax.matchedPred}%</Text>
+                          </HStack>
+                          <VStack gap={1}>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMin.matchedPred}
+                              onChange={(e) => setEdgeFilterMin({ ...edgeFilterMin, matchedPred: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMax.matchedPred}
+                              onChange={(e) => setEdgeFilterMax({ ...edgeFilterMax, matchedPred: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                          </VStack>
+                        </Box>
+                        <Box>
+                          <HStack justify="space-between" mb={1}>
+                            <Text fontSize="xs" opacity={0.8}>Unmatched %</Text>
+                            <Text fontSize="xs" fontWeight="semibold">{edgeFilterMin.unmatchedPred}% - {edgeFilterMax.unmatchedPred}%</Text>
+                          </HStack>
+                          <VStack gap={1}>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMin.unmatchedPred}
+                              onChange={(e) => setEdgeFilterMin({ ...edgeFilterMin, unmatchedPred: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMax.unmatchedPred}
+                              onChange={(e) => setEdgeFilterMax({ ...edgeFilterMax, unmatchedPred: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                          </VStack>
+                        </Box>
+                      </VStack>
+                    </Box>
+                    
+                    {/* References */}
+                    <Box>
+                      <Text fontSize="xs" fontWeight="semibold" mb={3}>References</Text>
+                      <VStack align="stretch" gap={4}>
+                        <Box>
+                          <HStack justify="space-between" mb={1}>
+                            <Text fontSize="xs" opacity={0.8}>Matched %</Text>
+                            <Text fontSize="xs" fontWeight="semibold">{edgeFilterMin.matchedRef}% - {edgeFilterMax.matchedRef}%</Text>
+                          </HStack>
+                          <VStack gap={1}>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMin.matchedRef}
+                              onChange={(e) => setEdgeFilterMin({ ...edgeFilterMin, matchedRef: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMax.matchedRef}
+                              onChange={(e) => setEdgeFilterMax({ ...edgeFilterMax, matchedRef: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                          </VStack>
+                        </Box>
+                        <Box>
+                          <HStack justify="space-between" mb={1}>
+                            <Text fontSize="xs" opacity={0.8}>Unmatched %</Text>
+                            <Text fontSize="xs" fontWeight="semibold">{edgeFilterMin.unmatchedRef}% - {edgeFilterMax.unmatchedRef}%</Text>
+                          </HStack>
+                          <VStack gap={1}>
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMin.unmatchedRef}
+                              onChange={(e) => setEdgeFilterMin({ ...edgeFilterMin, unmatchedRef: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                            <input
+                              type="range"
+                              min={0}
+                              max={100}
+                              step={5}
+                              value={edgeFilterMax.unmatchedRef}
+                              onChange={(e) => setEdgeFilterMax({ ...edgeFilterMax, unmatchedRef: e.target.value })}
+                              style={{ width: "100%" }}
+                            />
+                          </VStack>
+                        </Box>
+                      </VStack>
+                    </Box>
+                  </Grid>
+                  
+                  <HStack gap={2} justify="flex-end">
+                    <Button
+                      size="xs"
+                      variant="outline"
+                      onClick={() => {
+                        setEdgeFilterMin({ matchedPred: "0", unmatchedPred: "0", matchedRef: "0", unmatchedRef: "0" })
+                        setEdgeFilterMax({ matchedPred: "100", unmatchedPred: "100", matchedRef: "100", unmatchedRef: "100" })
+                        fetchComponents(1, appliedQuery)
+                      }}
+                    >
+                      Clear Filter
+                    </Button>
+                    <Button
+                      size="xs"
+                      onClick={() => fetchComponents(1, appliedQuery)}
+                    >
+                      Apply Filter
+                    </Button>
+                  </HStack>
+                  
+                  <Text fontSize="xs" opacity={0.6}>
+                    Drag sliders to set percentage ranges for node types. Click "Apply Filter" to filter components on the server. Default (0-100%) means no filter applied.
+                  </Text>
+                </VStack>
+              </Box>
+            )}
           </Card.Header>
           <Card.Body>
             {!selectedNetwork ? (
@@ -317,6 +517,29 @@ const ComponentsPage = () => {
                 {components.items.map((it) => {
                   const favKey = `${selectedNetwork ?? ''}||${it.filename}||${it.component_id}`
                   const isSaved = favoritesSet.has(favKey)
+                  
+                  // Calculate edge type percentages for display
+                  const stats = it.edge_type_stats
+                  let edgeStatsDisplay = null
+                  if (stats && stats.total > 0) {
+                    const totalPred = stats.matched_prediction + stats.prediction
+                    const totalRef = stats.matched_reference + stats.reference
+                    edgeStatsDisplay = (
+                      <HStack gap={3} fontSize="xs" opacity={0.8}>
+                        {totalPred > 0 && (
+                          <Text>
+                            Pred: {Math.round((stats.matched_prediction / totalPred) * 100)}% matched
+                          </Text>
+                        )}
+                        {totalRef > 0 && (
+                          <Text>
+                            Ref: {Math.round((stats.matched_reference / totalRef) * 100)}% matched
+                          </Text>
+                        )}
+                      </HStack>
+                    )
+                  }
+                  
                   return (
                   <Flex key={`${it.filename}-${it.component_id}`} px={3} py={2} borderWidth="1px" borderRadius="md" align="center" justify="space-between">
                     <VStack align="start" gap={0}>
@@ -326,6 +549,7 @@ const ComponentsPage = () => {
                       <Text fontSize="xs" opacity={0.7}>
                         size {it.size} · edges {it.edges} · proteins {it.proteins_count}
                       </Text>
+                      {edgeStatsDisplay}
                     </VStack>
                     <HStack gap={2}>
                     {isSaved && (

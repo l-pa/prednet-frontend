@@ -6,10 +6,12 @@ import {
   Flex,
   Grid,
   Heading,
+  Input,
   Spinner,
   Text,
   VStack,
   HStack,
+  Tabs,
 } from "@chakra-ui/react"
 import { createFileRoute } from "@tanstack/react-router"
 import { useEffect, useState } from "react"
@@ -52,7 +54,14 @@ const NetworksPage = () => {
   const [loadingGraph, setLoadingGraph] = useState(false)
   const [graphLoadStep, setGraphLoadStep] = useState<string | null>(null)
   const [panelsCollapsed, setPanelsCollapsed] = useState(false)
-  const { showErrorToast } = useCustomToast()
+  // Component size filter
+  const [minComponentSize, setMinComponentSize] = useState<string>("")
+  const [maxComponentSize, setMaxComponentSize] = useState<string>("")
+  const [filterEnabled, setFilterEnabled] = useState(false)
+  const [originalGraphData, setOriginalGraphData] = useState<CytoscapeGraph | null>(null)
+  const [selectedOrganism, setSelectedOrganism] = useState<string>("All")
+  const [componentSizes, setComponentSizes] = useState<number[]>([])
+  const { showErrorToast} = useCustomToast()
   const [renderer, setRenderer] = useState<"cytoscape" | "sigma" | "reagraph">(() => {
     try {
       const stored = localStorage.getItem("network.renderer")
@@ -153,7 +162,144 @@ const NetworksPage = () => {
         console.log("Sample edge:", data.edges[0])
       }
       setGraphLoadStep("Rendering network…")
-      setGraphData(data)
+      
+      // Store original data for re-filtering
+      setOriginalGraphData(data)
+      
+      // Compute component sizes for distribution graph
+      const nodeIds = new Set<string>()
+      data.nodes.forEach((n: any) => {
+        const id = n?.data?.id
+        if (id) nodeIds.add(String(id))
+      })
+      const adjacency = new Map<string, Set<string>>()
+      nodeIds.forEach(id => adjacency.set(id, new Set()))
+      data.edges.forEach((e: any) => {
+        const src = e?.data?.source
+        const tgt = e?.data?.target
+        if (src && tgt) {
+          const source = String(src)
+          const target = String(tgt)
+          adjacency.get(source)?.add(target)
+          adjacency.get(target)?.add(source)
+        }
+      })
+      
+      const visited = new Set<string>()
+      const sizes: number[] = []
+      nodeIds.forEach(startId => {
+        if (!startId || visited.has(startId)) return
+        const queue = [startId]
+        let componentSize = 0
+        while (queue.length > 0) {
+          const id = queue.shift()!
+          if (visited.has(id)) continue
+          visited.add(id)
+          componentSize++
+          const neighbors = adjacency.get(id) || new Set()
+          neighbors.forEach(neighbor => {
+            if (!visited.has(neighbor)) queue.push(neighbor)
+          })
+        }
+        sizes.push(componentSize)
+      })
+      setComponentSizes(sizes.sort((a, b) => b - a))
+      
+      // Apply component size filter if enabled
+      let filteredData = data
+      if (minComponentSize || maxComponentSize) {
+        setGraphLoadStep("Filtering components by size…")
+        const minSize = minComponentSize ? parseInt(minComponentSize, 10) : 0
+        const maxSize = maxComponentSize ? parseInt(maxComponentSize, 10) : Infinity
+        
+        // Compute connected components
+        const nodeIds = new Set<string>()
+        data.nodes.forEach((n: any) => {
+          const id = n?.data?.id
+          if (id) nodeIds.add(String(id))
+        })
+        const adjacency = new Map<string, Set<string>>()
+        
+        // Build adjacency list
+        nodeIds.forEach(id => adjacency.set(id, new Set()))
+        data.edges.forEach((e: any) => {
+          const src = e?.data?.source
+          const tgt = e?.data?.target
+          if (src && tgt) {
+            const source = String(src)
+            const target = String(tgt)
+            adjacency.get(source)?.add(target)
+            adjacency.get(target)?.add(source)
+          }
+        })
+        
+        // Find components using BFS
+        const visited = new Set<string>()
+        const components: Set<string>[] = []
+        
+        nodeIds.forEach(startId => {
+          if (!startId || visited.has(startId)) return
+          
+          const component = new Set<string>()
+          const queue = [startId]
+          
+          while (queue.length > 0) {
+            const id = queue.shift()!
+            if (visited.has(id)) continue
+            
+            visited.add(id)
+            component.add(id)
+            
+            const neighbors = adjacency.get(id) || new Set()
+            neighbors.forEach(neighbor => {
+              if (!visited.has(neighbor)) {
+                queue.push(neighbor)
+              }
+            })
+          }
+          
+          components.push(component)
+        })
+        
+        // Filter components by size
+        const validNodeIds = new Set<string>()
+        components.forEach(component => {
+          if (component.size >= minSize && component.size <= maxSize) {
+            component.forEach(id => validNodeIds.add(id))
+          }
+        })
+        
+        // Filter nodes and edges
+        filteredData = {
+          nodes: data.nodes.filter((n: any) => {
+            const id = n?.data?.id
+            return id && validNodeIds.has(String(id))
+          }),
+          edges: data.edges.filter((e: any) => {
+            const src = e?.data?.source
+            const tgt = e?.data?.target
+            if (!src || !tgt) return false
+            return validNodeIds.has(String(src)) && validNodeIds.has(String(tgt))
+          })
+        }
+        
+        console.log(`Filtered from ${data.nodes.length} to ${filteredData.nodes.length} nodes`)
+        console.log(`Filtered from ${data.edges.length} to ${filteredData.edges.length} edges`)
+        
+        // Show warning if filter resulted in 0 nodes
+        if (filteredData.nodes.length === 0) {
+          showErrorToast(
+            `Filter resulted in 0 nodes. No components match the size range (${minSize}-${maxSize === Infinity ? '∞' : maxSize} nodes). Try adjusting the filter.`
+          )
+          setLoadingGraph(false)
+          setGraphLoadStep(null)
+          return
+        }
+        
+        setFilterEnabled(true)
+      }
+      
+      setGraphData(filteredData)
       setSelectedFile(filename)
       // Collapse the top panels to focus on the network
       setPanelsCollapsed(true)
@@ -164,6 +310,102 @@ const NetworksPage = () => {
       setLoadingGraph(false)
       setGraphLoadStep(null)
     }
+  }
+
+  // Apply filter to existing loaded network
+  const applyFilterToExisting = () => {
+    if (!originalGraphData) {
+      showErrorToast("No network loaded to filter")
+      return
+    }
+
+    const minSize = minComponentSize ? parseInt(minComponentSize, 10) : 0
+    const maxSize = maxComponentSize ? parseInt(maxComponentSize, 10) : Infinity
+
+    // Use the same filtering logic
+    const data = originalGraphData
+    const nodeIds = new Set<string>()
+    data.nodes.forEach((n: any) => {
+      const id = n?.data?.id
+      if (id) nodeIds.add(String(id))
+    })
+    const adjacency = new Map<string, Set<string>>()
+
+    // Build adjacency list
+    nodeIds.forEach(id => adjacency.set(id, new Set()))
+    data.edges.forEach((e: any) => {
+      const src = e?.data?.source
+      const tgt = e?.data?.target
+      if (src && tgt) {
+        const source = String(src)
+        const target = String(tgt)
+        adjacency.get(source)?.add(target)
+        adjacency.get(target)?.add(source)
+      }
+    })
+
+    // Find components using BFS
+    const visited = new Set<string>()
+    const components: Set<string>[] = []
+
+    nodeIds.forEach(startId => {
+      if (!startId || visited.has(startId)) return
+
+      const component = new Set<string>()
+      const queue = [startId]
+
+      while (queue.length > 0) {
+        const id = queue.shift()!
+        if (visited.has(id)) continue
+
+        visited.add(id)
+        component.add(id)
+
+        const neighbors = adjacency.get(id) || new Set()
+        neighbors.forEach(neighbor => {
+          if (!visited.has(neighbor)) {
+            queue.push(neighbor)
+          }
+        })
+      }
+
+      components.push(component)
+    })
+
+    // Filter components by size
+    const validNodeIds = new Set<string>()
+    components.forEach(component => {
+      if (component.size >= minSize && component.size <= maxSize) {
+        component.forEach(id => validNodeIds.add(id))
+      }
+    })
+
+    // Filter nodes and edges
+    const filteredData = {
+      nodes: data.nodes.filter((n: any) => {
+        const id = n?.data?.id
+        return id && validNodeIds.has(String(id))
+      }),
+      edges: data.edges.filter((e: any) => {
+        const src = e?.data?.source
+        const tgt = e?.data?.target
+        if (!src || !tgt) return false
+        return validNodeIds.has(String(src)) && validNodeIds.has(String(tgt))
+      })
+    }
+
+    console.log(`Re-filtered from ${data.nodes.length} to ${filteredData.nodes.length} nodes`)
+
+    // Show warning if filter resulted in 0 nodes
+    if (filteredData.nodes.length === 0) {
+      showErrorToast(
+        `Filter resulted in 0 nodes. No components match the size range (${minSize}-${maxSize === Infinity ? '∞' : maxSize} nodes). Try adjusting the filter.`
+      )
+      return
+    }
+
+    setGraphData(filteredData)
+    setFilterEnabled(true)
   }
 
   // Load networks on component mount
@@ -211,35 +453,201 @@ const NetworksPage = () => {
         </Flex>
 
         {(!panelsCollapsed) && (
-          <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr" }} gap={6}>
+          <Grid templateColumns={{ base: "1fr", lg: "1fr 1fr 1fr" }} gap={6}>
           {/* Networks Panel */}
           <Card.Root>
             <Card.Header>
               <Heading size="md">Available Networks</Heading>
             </Card.Header>
-            <Card.Body>
+            <Card.Body maxH="300px" overflowY="auto">
               {loading ? (
                 <Flex justify="center" py={8}>
                   <Spinner />
                 </Flex>
               ) : (
-                <VStack align="stretch" gap={2}>
-                  {networks.map((network) => (
-                    <Button
-                      key={network.name}
-                      variant={selectedNetwork === network.name ? "solid" : "outline"}
-                      onClick={() => fetchGdfFiles(network.name)}
-                      justifyContent="space-between"
-                      size="sm"
-                    >
-                      <Text>{network.name}</Text>
-                      <Text fontSize="xs" opacity={0.7}>
-                        {network.file_count} GDF files
-                      </Text>
-                    </Button>
+                <Tabs.Root
+                  value={selectedOrganism}
+                  onValueChange={(e) => setSelectedOrganism(e.value)}
+                  variant="enclosed"
+                  size="sm"
+                >
+                  <Tabs.List>
+                    <Tabs.Trigger value="All">All</Tabs.Trigger>
+                    {Array.from(new Set(networks.map(n => {
+                      // Extract organism from network name (e.g., "Yeast" from "Yeast/BioGRID")
+                      const parts = n.name.split('/')
+                      return parts[0] || n.name
+                    }))).sort().map(organism => (
+                      <Tabs.Trigger key={organism} value={organism}>
+                        {organism}
+                      </Tabs.Trigger>
+                    ))}
+                  </Tabs.List>
+                  <Tabs.Content value="All">
+                    <VStack align="stretch" gap={2} mt={2}>
+                      {networks.map((network) => (
+                        <Button
+                          key={network.name}
+                          variant={selectedNetwork === network.name ? "solid" : "outline"}
+                          onClick={() => fetchGdfFiles(network.name)}
+                          justifyContent="space-between"
+                          size="sm"
+                        >
+                          <Text>{network.name}</Text>
+                          <Text fontSize="xs" opacity={0.7}>
+                            {network.file_count} GDF files
+                          </Text>
+                        </Button>
+                      ))}
+                    </VStack>
+                  </Tabs.Content>
+                  {Array.from(new Set(networks.map(n => {
+                    const parts = n.name.split('/')
+                    return parts[0] || n.name
+                  }))).sort().map(organism => (
+                    <Tabs.Content key={organism} value={organism}>
+                      <VStack align="stretch" gap={2} mt={2}>
+                        {networks
+                          .filter(n => n.name.startsWith(organism + '/') || n.name === organism)
+                          .map((network) => (
+                            <Button
+                              key={network.name}
+                              variant={selectedNetwork === network.name ? "solid" : "outline"}
+                              onClick={() => fetchGdfFiles(network.name)}
+                              justifyContent="space-between"
+                              size="sm"
+                            >
+                              <Text>{network.name}</Text>
+                              <Text fontSize="xs" opacity={0.7}>
+                                {network.file_count} GDF files
+                              </Text>
+                            </Button>
+                          ))}
+                      </VStack>
+                    </Tabs.Content>
                   ))}
-                </VStack>
+                </Tabs.Root>
               )}
+            </Card.Body>
+          </Card.Root>
+
+          {/* Component Size Filter - Step 2 */}
+          <Card.Root>
+            <Card.Header>
+              <Heading size="md">Filter by Size (Optional)</Heading>
+            </Card.Header>
+            <Card.Body maxH="300px" overflowY="auto">
+              <VStack align="stretch" gap={3}>
+                <Text fontSize="sm" opacity={0.8}>
+                  Filter components by node count when loading a GDF file.
+                </Text>
+                <VStack align="stretch" gap={2}>
+                  <HStack gap={2}>
+                    <Text fontSize="sm" fontWeight="500" minW="80px">Min nodes:</Text>
+                    <Input
+                      placeholder="e.g., 5"
+                      value={minComponentSize}
+                      onChange={(e) => setMinComponentSize(e.target.value)}
+                      size="sm"
+                      type="number"
+                      min="1"
+                    />
+                  </HStack>
+                  <HStack gap={2}>
+                    <Text fontSize="sm" fontWeight="500" minW="80px">Max nodes:</Text>
+                    <Input
+                      placeholder="e.g., 100"
+                      value={maxComponentSize}
+                      onChange={(e) => setMaxComponentSize(e.target.value)}
+                      size="sm"
+                      type="number"
+                      min="1"
+                    />
+                  </HStack>
+                </VStack>
+                <VStack align="stretch" gap={2}>
+                  <Button
+                    size="sm"
+                    variant="solid"
+                    colorScheme="blue"
+                    onClick={applyFilterToExisting}
+                    disabled={!originalGraphData || (!minComponentSize && !maxComponentSize)}
+                    width="full"
+                  >
+                    Apply Filter
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    onClick={() => {
+                      setMinComponentSize("")
+                      setMaxComponentSize("")
+                      setFilterEnabled(false)
+                      // Restore original data if available
+                      if (originalGraphData) {
+                        setGraphData(originalGraphData)
+                      }
+                    }}
+                    disabled={!filterEnabled && !minComponentSize && !maxComponentSize}
+                    width="full"
+                  >
+                    Clear Filter
+                  </Button>
+                </VStack>
+                {(minComponentSize || maxComponentSize) && (
+                  <Text fontSize="xs" color="blue.600" _dark={{ color: "blue.400" }}>
+                    ✓ Filter ready
+                  </Text>
+                )}
+                
+                {/* Component Size Distribution */}
+                {componentSizes.length > 0 && (
+                  <Box>
+                    <Text fontSize="xs" mb={2} opacity={0.8}>
+                      Component size distribution ({componentSizes.length} components)
+                    </Text>
+                    <VStack align="stretch" gap={1}>
+                      {(() => {
+                        // Group sizes into buckets for visualization
+                        const maxSize = Math.max(...componentSizes)
+                        const buckets = [
+                          { label: '1-5', min: 1, max: 5 },
+                          { label: '6-10', min: 6, max: 10 },
+                          { label: '11-20', min: 11, max: 20 },
+                          { label: '21-50', min: 21, max: 50 },
+                          { label: '51-100', min: 51, max: 100 },
+                          { label: '100+', min: 101, max: Infinity },
+                        ]
+                        
+                        const counts = buckets.map(bucket => ({
+                          ...bucket,
+                          count: componentSizes.filter(s => s >= bucket.min && s <= bucket.max).length
+                        })).filter(b => b.count > 0)
+                        
+                        const maxCount = Math.max(...counts.map(b => b.count), 1)
+                        
+                        return counts.map(bucket => {
+                          const pct = Math.max(4, Math.round((bucket.count / maxCount) * 100))
+                          return (
+                            <Box key={bucket.label}>
+                              <HStack justify="space-between" fontSize="xs">
+                                <Text>{bucket.label} nodes</Text>
+                                <Text>{bucket.count}</Text>
+                              </HStack>
+                              <Box bg="blackAlpha.200" _dark={{ bg: 'whiteAlpha.200' }} h="4px" rounded="sm">
+                                <Box bg="blue.500" h="100%" width={`${pct}%`} rounded="sm" />
+                              </Box>
+                            </Box>
+                          )
+                        })
+                      })()}
+                    </VStack>
+                    <Text fontSize="xs" mt={2} opacity={0.6}>
+                      Largest: {Math.max(...componentSizes)} nodes
+                    </Text>
+                  </Box>
+                )}
+              </VStack>
             </Card.Body>
           </Card.Root>
 
@@ -251,7 +659,7 @@ const NetworksPage = () => {
                 {selectedNetwork && ` - ${selectedNetwork}`}
               </Heading>
             </Card.Header>
-            <Card.Body>
+            <Card.Body maxH="300px" overflowY="auto">
               {loadingFiles ? (
                 <Flex justify="center" py={8}>
                   <Spinner />

@@ -52,7 +52,7 @@ function ExampleInToolbar() {
           nodeThreshold: 200,
           edgeThreshold: 400,
           color: 'yellow',
-          optimizations: { disableEdgeHover: true }
+          optimizations: { suggestDisableEdgeHover: true }
         }}
         estimatedLayoutTime={2500}
       />

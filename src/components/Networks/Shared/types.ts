@@ -15,8 +15,17 @@ export interface ProteinCount {
   other_components_network?: number
 }
 
+export interface EdgeTypeStats {
+  matched_prediction: number
+  matched_reference: number
+  prediction: number
+  reference: number
+  total: number
+}
+
 export interface NodeInfo {
   componentId?: number
   componentSize?: number
   proteinCounts?: ProteinCount[]
+  edgeTypeStats?: EdgeTypeStats
 }

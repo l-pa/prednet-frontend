@@ -4,6 +4,8 @@ import { FiHash, FiPercent, FiSettings, FiTarget } from "react-icons/fi"
 import { OpenAPI } from "@/client"
 import { useNetworkSidebar } from '@/components/Networks/Shared/NetworkSidebarContext'
 import type { ProteinCount } from '@/components/Networks/Shared/types'
+import ProteinComparisonModal from '@/components/Networks/Cytoscape/ProteinComparisonModal'
+import { useEffect, useRef } from "react"
 
 export default function NetworkSidebar() {
   const {
@@ -19,8 +21,78 @@ export default function NetworkSidebar() {
     proteinCountsSorted, proteinMaxCount, nodeLabelProteins,
     computeComponents, previewComponent, clearHoverPreview, highlightComponent,
     highlightProteins, setHighlightProteins, expandedProteins, setExpandedProteins,
+    selectedForComparison, setSelectedForComparison, comparisonModalOpen, setComparisonModalOpen,
+    dataSource,
     graphRef, hoverRevertTimeoutRef, prevViewRef,
   } = useNetworkSidebar()
+  
+  // Screen reader announcement for selection changes
+  const announcementRef = useRef<HTMLDivElement>(null)
+  
+  // Store protein-to-node mapping for grouping in comparison
+  const proteinToNodeMapRef = useRef<Map<string, string>>(new Map())
+  
+  // Build protein-to-node mapping from the graph
+  const buildProteinToNodeMap = (): Map<string, string> => {
+    const map = new Map<string, string>()
+    const graph = graphRef.current
+    if (!graph) return map
+    
+    try {
+      const nodes = graph.nodes ? graph.nodes() : []
+      nodes.forEach((nodeId: string) => {
+        const label = graph.getNodeAttribute ? graph.getNodeAttribute(nodeId, 'label') : graph.data?.(nodeId)?.label
+        const lbl = String(label ?? "")
+        const proteins = lbl.split(/\s+/).filter(p => p.length > 0)
+        proteins.forEach(protein => {
+          map.set(protein, nodeId)
+        })
+      })
+    } catch (error) {
+      console.error("Error building protein-to-node map:", error)
+    }
+    
+    return map
+  }
+  
+  useEffect(() => {
+    if (announcementRef.current) {
+      const count = selectedForComparison.size
+      if (count === 0) {
+        announcementRef.current.textContent = ""
+      } else if (count === 1) {
+        announcementRef.current.textContent = "1 protein selected for comparison"
+      } else {
+        announcementRef.current.textContent = `${count} proteins selected for comparison. You can now view the comparison.`
+      }
+    }
+  }, [selectedForComparison.size])
+  
+  const handleToggleCompare = (protein: string) => {
+    const next = new Set(selectedForComparison)
+    const wasSelected = next.has(protein)
+    if (wasSelected) {
+      next.delete(protein)
+    } else {
+      next.add(protein)
+    }
+    setSelectedForComparison(next)
+    
+    // Announce the change
+    if (announcementRef.current) {
+      if (wasSelected) {
+        announcementRef.current.textContent = `${protein} removed from comparison`
+      } else {
+        announcementRef.current.textContent = `${protein} added to comparison`
+      }
+    }
+  }
+  
+  const handleRemoveProtein = (protein: string) => {
+    const next = new Set(selectedForComparison)
+    next.delete(protein)
+    setSelectedForComparison(next)
+  }
 
   const renderProteinItem = ({ protein, count, type_counts, ratio, other_components }: ProteinCount) => {
     const totalPct = Math.max(4, Math.round((count / proteinMaxCount) * 100))
@@ -76,6 +148,22 @@ export default function NetworkSidebar() {
                 title="Toggle highlight"
               >
                 <FiTarget />
+              </Button>
+              <Button
+                size="2xs"
+                variant={selectedForComparison.has(protein) ? 'solid' : 'outline'}
+                onClick={() => handleToggleCompare(protein)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.preventDefault()
+                    handleToggleCompare(protein)
+                  }
+                }}
+                aria-label={selectedForComparison.has(protein) ? `Remove ${protein} from comparison` : `Add ${protein} to comparison`}
+                aria-pressed={selectedForComparison.has(protein)}
+                title={selectedForComparison.has(protein) ? 'Remove from comparison' : 'Add to comparison'}
+              >
+                Compare
               </Button>
               <Button
                 size="2xs"
@@ -176,6 +264,22 @@ export default function NetworkSidebar() {
   }
 
   return (
+    <>
+    {/* Screen reader announcements for selection changes */}
+    <div
+      ref={announcementRef}
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+      style={{
+        position: 'absolute',
+        left: '-10000px',
+        width: '1px',
+        height: '1px',
+        overflow: 'hidden',
+      }}
+    />
+    
     <DrawerRoot open={isDrawerOpen} onOpenChange={(e) => setIsDrawerOpen(e.open)} placement="end" modal={false} closeOnInteractOutside={false} trapFocus={false}>
       <DrawerContent maxW="sm">
         <DrawerHeader>
@@ -335,9 +439,52 @@ export default function NetworkSidebar() {
                         const filtered = proteinCountsSorted.filter((item: ProteinCount) => nodeLabelProteins.includes(item.protein))
                         if (filtered.length === 0) return <Text opacity={0.7}>(no proteins in label)</Text>
                         return (
-                          <Stack gap={3} overflowY="auto">
-                            {filtered.map(renderProteinItem)}
-                          </Stack>
+                          <>
+                            {/* Compare All Node Proteins Button */}
+                            {filtered.length >= 2 && (
+                              <Box mb={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  colorScheme="blue"
+                                  onClick={() => {
+                                    const proteins = filtered.map(p => p.protein)
+                                    setSelectedForComparison(new Set(proteins))
+                                    setComparisonModalOpen(true)
+                                    if (announcementRef.current) {
+                                      announcementRef.current.textContent = `Comparing ${proteins.length} proteins from this node`
+                                    }
+                                  }}
+                                  aria-label={`Compare all ${filtered.length} proteins from this node`}
+                                >
+                                  Compare All Node Proteins ({filtered.length})
+                                </Button>
+                              </Box>
+                            )}
+                            
+                            <Stack gap={3} overflowY="auto">
+                              {filtered.map(renderProteinItem)}
+                            </Stack>
+                            
+                            {selectedForComparison.size >= 2 && (
+                              <Box mt={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  onClick={() => setComparisonModalOpen(true)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      setComparisonModalOpen(true)
+                                    }
+                                  }}
+                                  aria-label={`View comparison of ${selectedForComparison.size} selected proteins`}
+                                >
+                                  View Comparison ({selectedForComparison.size} proteins)
+                                </Button>
+                              </Box>
+                            )}
+                          </>
                         )
                       })()
                     ) : (
@@ -346,6 +493,96 @@ export default function NetworkSidebar() {
                   </Box>
                 )}
               </Box>
+
+              {/* Component edge statistics section */}
+              {selectedNodeInfo?.edgeTypeStats && (
+                <Box>
+                  <HStack justify="space-between">
+                    <Text fontWeight="bold">Component edge statistics</Text>
+                  </HStack>
+                  <Box mt={2}>
+                    {(() => {
+                      const stats = selectedNodeInfo.edgeTypeStats
+                      const totalPred = stats.matched_prediction + stats.prediction
+                      const totalRef = stats.matched_reference + stats.reference
+                      
+                      return (
+                        <Stack gap={3} fontSize="sm">
+                          {/* Predictions */}
+                          {totalPred > 0 && (
+                            <Box>
+                              <HStack justify="space-between" mb={1}>
+                                <Text>Predictions</Text>
+                                <Text>{totalPred}</Text>
+                              </HStack>
+                              <HStack gap={0} h="16px" rounded="sm" overflow="hidden">
+                                {stats.matched_prediction > 0 && (
+                                  <Box
+                                    bg="#74C476"
+                                    h="100%"
+                                    width={`${(stats.matched_prediction / totalPred) * 100}%`}
+                                    title={`Matched: ${stats.matched_prediction} (${Math.round((stats.matched_prediction / totalPred) * 100)}%)`}
+                                  />
+                                )}
+                                {stats.prediction > 0 && (
+                                  <Box
+                                    bg="#FCCF40"
+                                    h="100%"
+                                    width={`${(stats.prediction / totalPred) * 100}%`}
+                                    title={`Unmatched: ${stats.prediction} (${Math.round((stats.prediction / totalPred) * 100)}%)`}
+                                  />
+                                )}
+                              </HStack>
+                              <HStack justify="space-between" mt={1} fontSize="xs" opacity={0.7}>
+                                <Text>Matched: {stats.matched_prediction} ({Math.round((stats.matched_prediction / totalPred) * 100)}%)</Text>
+                                <Text>Unmatched: {stats.prediction} ({Math.round((stats.prediction / totalPred) * 100)}%)</Text>
+                              </HStack>
+                            </Box>
+                          )}
+                          
+                          {/* References */}
+                          {totalRef > 0 && (
+                            <Box>
+                              <HStack justify="space-between" mb={1}>
+                                <Text>References</Text>
+                                <Text>{totalRef}</Text>
+                              </HStack>
+                              <HStack gap={0} h="16px" rounded="sm" overflow="hidden">
+                                {stats.matched_reference > 0 && (
+                                  <Box
+                                    bg="#67A9CF"
+                                    h="100%"
+                                    width={`${(stats.matched_reference / totalRef) * 100}%`}
+                                    title={`Matched: ${stats.matched_reference} (${Math.round((stats.matched_reference / totalRef) * 100)}%)`}
+                                  />
+                                )}
+                                {stats.reference > 0 && (
+                                  <Box
+                                    bg="#D94801"
+                                    h="100%"
+                                    width={`${(stats.reference / totalRef) * 100}%`}
+                                    title={`Unmatched: ${stats.reference} (${Math.round((stats.reference / totalRef) * 100)}%)`}
+                                  />
+                                )}
+                              </HStack>
+                              <HStack justify="space-between" mt={1} fontSize="xs" opacity={0.7}>
+                                <Text>Matched: {stats.matched_reference} ({Math.round((stats.matched_reference / totalRef) * 100)}%)</Text>
+                                <Text>Unmatched: {stats.reference} ({Math.round((stats.reference / totalRef) * 100)}%)</Text>
+                              </HStack>
+                            </Box>
+                          )}
+                          
+                          {/* Total */}
+                          <HStack justify="space-between" fontSize="xs" opacity={0.8}>
+                            <Text fontWeight="semibold">Total edges:</Text>
+                            <Text>{stats.total}</Text>
+                          </HStack>
+                        </Stack>
+                      )
+                    })()}
+                  </Box>
+                </Box>
+              )}
 
               {/* Component protein distribution section */}
               <Box>
@@ -366,9 +603,54 @@ export default function NetworkSidebar() {
                         const allProteins = proteinCountsSorted
                         if (allProteins.length === 0) return <Text opacity={0.7}>(no proteins)</Text>
                         return (
-                          <Stack gap={3} overflowY="auto">
-                            {allProteins.map(renderProteinItem)}
-                          </Stack>
+                          <>
+                            {/* Compare All Component Proteins Button */}
+                            {allProteins.length >= 2 && (
+                              <Box mb={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  colorScheme="purple"
+                                  onClick={() => {
+                                    const proteins = allProteins.map(p => p.protein)
+                                    setSelectedForComparison(new Set(proteins))
+                                    // Build protein-to-node map for grouping
+                                    proteinToNodeMapRef.current = buildProteinToNodeMap()
+                                    setComparisonModalOpen(true)
+                                    if (announcementRef.current) {
+                                      announcementRef.current.textContent = `Comparing ${proteins.length} proteins from entire component, grouped by node`
+                                    }
+                                  }}
+                                  aria-label={`Compare all ${allProteins.length} proteins from this component`}
+                                >
+                                  Compare All Component Proteins ({allProteins.length})
+                                </Button>
+                              </Box>
+                            )}
+                            
+                            <Stack gap={3} overflowY="auto">
+                              {allProteins.map(renderProteinItem)}
+                            </Stack>
+                            
+                            {selectedForComparison.size >= 2 && (
+                              <Box mt={3}>
+                                <Button
+                                  size="sm"
+                                  width="full"
+                                  onClick={() => setComparisonModalOpen(true)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' || e.key === ' ') {
+                                      e.preventDefault()
+                                      setComparisonModalOpen(true)
+                                    }
+                                  }}
+                                  aria-label={`View comparison of ${selectedForComparison.size} selected proteins`}
+                                >
+                                  View Comparison ({selectedForComparison.size} proteins)
+                                </Button>
+                              </Box>
+                            )}
+                          </>
                         )
                       })()
                     ) : (
@@ -384,5 +666,24 @@ export default function NetworkSidebar() {
         </DrawerBody>
       </DrawerContent>
     </DrawerRoot>
+    
+    {/* Protein Comparison Modal */}
+    {networkName && (
+      <ProteinComparisonModal
+        isOpen={comparisonModalOpen}
+        onClose={() => {
+          setComparisonModalOpen(false)
+          // Clear the map when closing
+          proteinToNodeMapRef.current = new Map()
+        }}
+        selectedProteins={Array.from(selectedForComparison)}
+        networkName={networkName}
+        onRemoveProtein={handleRemoveProtein}
+        dataSource={dataSource}
+        nodeProteins={nodeLabelProteins}
+        proteinToNodeMap={proteinToNodeMapRef.current.size > 0 ? proteinToNodeMapRef.current : undefined}
+      />
+    )}
+  </>
   )
 }

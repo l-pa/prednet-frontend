@@ -10,6 +10,7 @@ import {
 import GOTermsToolbar from "./GOTermsToolbar"
 import GODomainSection from "./GODomainSection"
 import GOTermsLegend from "./GOTermsLegend"
+import GOTermDAG from "./GOTermDAG"
 
 interface GOTermsPanelProps {
   proteinData: ProteinFeatureData[] | null
@@ -33,6 +34,8 @@ const GOTermsPanel = memo(function GOTermsPanel({
   const [expandedDomains, setExpandedDomains] = useState<Set<GODomain>>(
     new Set(["biological_process", "cellular_component", "molecular_function"])
   )
+  const [viewMode, setViewMode] = useState<"tree" | "dag">("tree")
+  const [selectedDomainForDAG, setSelectedDomainForDAG] = useState<GODomain>("biological_process")
 
   // Screen reader announcements
   const announcementRef = useRef<HTMLDivElement>(null)
@@ -53,6 +56,8 @@ const GOTermsPanel = memo(function GOTermsPanel({
     ),
     [proteinGoTerms]
   )
+
+
 
   // Compute GO terms for each domain based on mode
   const domains: GODomain[] = useMemo(() => [
@@ -317,10 +322,14 @@ const GOTermsPanel = memo(function GOTermsPanel({
                   searchQuery={searchQuery}
                   onSearchChange={setSearchQuery}
                   matchCount={searchQuery ? totalTermCount : undefined}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  selectedDomain={selectedDomainForDAG}
+                  onDomainChange={setSelectedDomainForDAG}
                 />
 
-                {/* Domain sections */}
-                {domains.map((domain) => (
+                {/* Tree View - Domain sections */}
+                {viewMode === "tree" && domains.map((domain) => (
                   <GODomainSection
                     key={domain}
                     domain={domain}
@@ -334,6 +343,19 @@ const GOTermsPanel = memo(function GOTermsPanel({
                     onToggleSection={() => handleToggleDomain(domain)}
                   />
                 ))}
+
+                {/* DAG View - Single domain visualization */}
+                {viewMode === "dag" && (
+                  <GOTermDAG
+                    terms={processedTermsByDomain[selectedDomainForDAG]}
+                    domain={selectedDomainForDAG}
+                    allProteins={proteinNames}
+                    onTermClick={(termId) => {
+                      // Optional: handle term click (e.g., show details)
+                      console.log("Clicked term:", termId)
+                    }}
+                  />
+                )}
 
                 {/* Legend */}
                 <GOTermsLegend proteins={proteinNames} mode={mode} />
