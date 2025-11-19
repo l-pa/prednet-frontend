@@ -15,6 +15,12 @@ export function useProteinHighlight({
 }: UseProteinHighlightProps): UseProteinHighlightReturn {
   // Track whether highlighting is active to suppress labels/hover labels
   const highlightActiveRef = useRef<boolean>(false)
+  
+  // Store cy in a ref to ensure we always have the latest instance
+  const cyRef = useRef(cy)
+  useEffect(() => {
+    cyRef.current = cy
+  }, [cy])
 
   // Update highlight active state when proteins change
   useEffect(() => {
@@ -26,7 +32,8 @@ export function useProteinHighlight({
 
   // Main protein highlighting computation
   const recomputeProteinHighlight = useCallback(() => {
-    if (!cy) {
+    const currentCy = cyRef.current
+    if (!currentCy) {
       console.warn('Cannot compute protein highlight: Cytoscape instance not initialized')
       return
     }
@@ -34,15 +41,15 @@ export function useProteinHighlight({
     try {
       const tokensSel = new Set(highlightProteins)
       
-      cy.batch(() => {
+      currentCy.batch(() => {
         const anyActive = tokensSel.size > 0
         
         try {
           // Reset visibility
-          cy.nodes().forEach((n) => { 
+          currentCy.nodes().forEach((n) => { 
             n.style("display", "element") 
           })
-          cy.edges().forEach((e) => { 
+          currentCy.edges().forEach((e) => { 
             e.style("display", "element") 
           })
         } catch (error) {
@@ -52,7 +59,7 @@ export function useProteinHighlight({
         
         // Compute hits according to selected match mode
         try {
-          cy.nodes().forEach((n) => {
+          currentCy.nodes().forEach((n) => {
             if (!anyActive) {
               n.data("proteinHighlight", 0)
               n.data("dim", 0)
@@ -116,7 +123,7 @@ export function useProteinHighlight({
             const visited = new Set<string>()
             let componentId = 0
             
-            cy.nodes().forEach((n) => {
+            currentCy.nodes().forEach((n) => {
               if (visited.has(n.id())) return
               
               // Start BFS for this component
@@ -132,7 +139,7 @@ export function useProteinHighlight({
                 nodeToComponent.set(id, componentKey)
                 
                 try {
-                  const node = cy.getElementById(id)
+                  const node = currentCy.getElementById(id)
                   if (node && node.nonempty()) {
                     node.connectedEdges().forEach((e) => {
                       const s = String(e.data("source"))
@@ -149,7 +156,7 @@ export function useProteinHighlight({
               // Collect all matched proteins in this component
               const proteinsInComponent = new Set<string>()
               componentNodes.forEach((nodeId) => {
-                const node = cy.getElementById(nodeId)
+                const node = currentCy.getElementById(nodeId)
                 const matched = node.data("matchedProteins") as string[] | undefined
                 if (matched && matched.length > 0) {
                   matched.forEach((p) => proteinsInComponent.add(p))
@@ -162,7 +169,7 @@ export function useProteinHighlight({
             })
             
             // Second pass: assign component protein labels to all nodes
-            cy.nodes().forEach((n) => {
+            currentCy.nodes().forEach((n) => {
               const compKey = nodeToComponent.get(n.id())
               if (compKey) {
                 const proteins = componentProteins.get(compKey)
@@ -180,7 +187,7 @@ export function useProteinHighlight({
           }
         } else {
           // Clear component highlighting when no proteins selected
-          cy.nodes().forEach((n) => {
+          currentCy.nodes().forEach((n) => {
             n.removeData("componentProteins")
             n.data("componentHighlight", 0)
           })
@@ -194,7 +201,7 @@ export function useProteinHighlight({
             const queue: string[] = []
             
             // Seed queue with highlighted nodes
-            cy.nodes().forEach((n) => { 
+            currentCy.nodes().forEach((n) => { 
               if (n.data("proteinHighlight") === 1) {
                 queue.push(n.id()) 
               }
@@ -207,7 +214,7 @@ export function useProteinHighlight({
               visited.add(id)
               
               try {
-                const node = cy.getElementById(id)
+                const node = currentCy.getElementById(id)
                 if (node && node.nonempty()) {
                   node.connectedEdges().forEach((e) => {
                     const s = String(e.data("source"))
@@ -223,12 +230,12 @@ export function useProteinHighlight({
             }
             
             // Hide nodes not visited; keep only subgraph of visited ids
-            cy.nodes().forEach((n) => {
+            currentCy.nodes().forEach((n) => {
               if (!visited.has(n.id())) {
                 n.style("display", "none")
               }
             })
-            cy.edges().forEach((e) => {
+            currentCy.edges().forEach((e) => {
               const s = String(e.data("source"))
               const t = String(e.data("target"))
               if (!(visited.has(s) && visited.has(t))) {
@@ -243,12 +250,15 @@ export function useProteinHighlight({
     } catch (error) {
       console.error('Unexpected error in protein highlight computation:', error)
     }
-  }, [cy, highlightProteins, tokenize, filterComponentsByProteins, highlightMode])
+  }, [highlightProteins, tokenize, filterComponentsByProteins, highlightMode])
   
   // Recompute highlights when cy instance or proteins change
   useEffect(() => {
-    if (cy) {
+    if (cyRef.current) {
+      console.log('Recomputing protein highlight, proteins:', Array.from(highlightProteins))
       recomputeProteinHighlight()
+    } else {
+      console.warn('Cannot recompute protein highlight: Cytoscape instance not available')
     }
   }, [cy, highlightProteins, recomputeProteinHighlight])
 
